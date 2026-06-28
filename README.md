@@ -44,3 +44,17 @@ motors = {
     # ...
 }
 ```
+
+**Calibration** — pass calibration explicitly as a `dict[str, MotorCalibration]` loaded from the JSON file LeRobot saves at:
+```
+~/.cache/huggingface/lerobot/calibration/robots/so_follower/<name>.json
+```
+```python
+import json
+from lerobot.motors import MotorCalibration
+
+with open(calibration_path) as f:
+    data = json.load(f)
+calibration = {name: MotorCalibration(**fields) for name, fields in data.items()}
+bus = FeetechMotorsBus(port=port, motors=motors, calibration=calibration)
+```
