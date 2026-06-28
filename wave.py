@@ -65,8 +65,8 @@ REST_POSE = {
 # Arm raised and angled out so it looks like a raised hand
 WAVE_READY_POSE = {
     "shoulder_pan":   20.0,   # swing arm slightly outward
-    "shoulder_lift":  90.0,   # lift shoulder up
-    "elbow_flex":    -30.0,   # bend elbow so forearm points up
+    "shoulder_lift": -90.0,   # lift shoulder up
+    "elbow_flex":     30.0,   # bend elbow so forearm points up
     "wrist_flex":      0.0,
     "wrist_roll":      0.0,
     "gripper":         0.0,
