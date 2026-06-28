@@ -16,10 +16,26 @@ Joint names (SO-101, 6 motors):
 """
 
 import argparse
+import json
 import time
+from pathlib import Path
 
-from lerobot.motors import Motor, MotorNormMode
+from lerobot.motors import Motor, MotorCalibration, MotorNormMode
 from lerobot.motors.feetech import FeetechMotorsBus
+
+CALIBRATION_PATH = (
+    Path.home()
+    / ".cache/huggingface/lerobot/calibration/robots/so_follower/carpaldactyl_follower.json"
+)
+
+
+def load_calibration(path: Path) -> dict[str, MotorCalibration]:
+    with open(path) as f:
+        data = json.load(f)
+    return {
+        name: MotorCalibration(**fields)
+        for name, fields in data.items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +91,8 @@ def move_to(bus: FeetechMotorsBus, pose: dict, duration: float = 1.5) -> None:
 # ---------------------------------------------------------------------------
 
 def wave(port: str, reps: int) -> None:
-    bus = FeetechMotorsBus(port=port, motors=MOTORS)
+    calibration = load_calibration(CALIBRATION_PATH)
+    bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
     bus.connect()
 
     try:
