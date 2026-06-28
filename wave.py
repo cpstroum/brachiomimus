@@ -18,6 +18,7 @@ Joint names (SO-101, 6 motors):
 import argparse
 import time
 
+from lerobot.motors import Motor, MotorNormMode
 from lerobot.motors.feetech import FeetechMotorsBus
 
 
@@ -25,12 +26,12 @@ from lerobot.motors.feetech import FeetechMotorsBus
 # Motor configuration
 # ---------------------------------------------------------------------------
 MOTORS = {
-    "shoulder_pan":  (1, "sts3215"),
-    "shoulder_lift": (2, "sts3215"),
-    "elbow_flex":    (3, "sts3215"),
-    "wrist_flex":    (4, "sts3215"),
-    "wrist_roll":    (5, "sts3215"),
-    "gripper":       (6, "sts3215"),
+    "shoulder_pan":  Motor(id=1, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "shoulder_lift": Motor(id=2, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "elbow_flex":    Motor(id=3, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "wrist_flex":    Motor(id=4, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "wrist_roll":    Motor(id=5, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "gripper":       Motor(id=6, model="sts3215", norm_mode=MotorNormMode.DEGREES),
 }
 
 # ---------------------------------------------------------------------------
