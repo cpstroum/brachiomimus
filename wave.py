@@ -64,18 +64,9 @@ WAVE_RIGHT = {**WAVE_READY_POSE, "wrist_roll": -40.0}
 # Helpers
 # ---------------------------------------------------------------------------
 
-def pose_to_list(bus: FeetechMotorsBus, pose: dict) -> list[float]:
-    """Return pose values in motor-index order."""
-    return [pose[name] for name in bus.motors]
-
 
 def move_to(bus: FeetechMotorsBus, pose: dict, duration: float = 1.5) -> None:
-    """
-    Command all joints to the target pose and wait for `duration` seconds.
-    FeetechMotorsBus.write() expects values in the same order as bus.motors.
-    """
-    values = pose_to_list(bus, pose)
-    bus.write("Goal_Position", values)
+    bus.sync_write("Goal_Position", pose)
     time.sleep(duration)
 
 
@@ -88,8 +79,7 @@ def wave(port: str, reps: int) -> None:
     bus.connect()
 
     try:
-        # Enable torque on all motors
-        bus.write("Torque_Enable", [1] * len(MOTORS))
+        bus.sync_write("Torque_Enable", 1)
 
         print("Moving to rest pose …")
         move_to(bus, REST_POSE, duration=2.0)
@@ -102,14 +92,13 @@ def wave(port: str, reps: int) -> None:
             move_to(bus, WAVE_LEFT,  duration=0.5)
             move_to(bus, WAVE_RIGHT, duration=0.5)
 
-        # End neutral within the raised pose, then lower
         move_to(bus, WAVE_READY_POSE, duration=0.5)
 
         print("Returning to rest …")
         move_to(bus, REST_POSE, duration=2.0)
 
     finally:
-        bus.write("Torque_Enable", [0] * len(MOTORS))
+        bus.sync_write("Torque_Enable", 0)
         bus.disconnect()
         print("Done.")
 
