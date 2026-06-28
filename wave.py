@@ -18,7 +18,7 @@ Joint names (SO-101, 6 motors):
 import argparse
 import time
 
-from lerobot.common.robot_devices.motors.feetech import FeetechMotorsBus
+from lerobot.motors.feetech import FeetechMotorsBus
 
 
 # ---------------------------------------------------------------------------
