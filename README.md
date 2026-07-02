@@ -25,6 +25,17 @@ python wave.py --port /dev/ttyACM0 --reps 3
 python wave.py --port COM4 --reps 3
 ```
 
+## Calibration file locations
+
+After running `lerobot-calibrate`, files are saved here:
+
+| Arm | Path |
+|-----|------|
+| Follower | `~/.cache/huggingface/lerobot/calibration/robots/so_follower/<name>.json` |
+| Leader | `~/.cache/huggingface/lerobot/calibration/teleoperators/so_leader/<name>.json` |
+
+**Tip:** When calibrating, position the arm at the physical midpoint of every joint *before* launching the script — not just when prompted. If a joint is too far off-center, LeRobot will crash with a `Magnitude exceeds 2047` error.
+
 ## LeRobot compatibility notes (v0.4.x)
 
 These broke silently when upgrading from older LeRobot versions:
