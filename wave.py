@@ -25,7 +25,7 @@ from lerobot.motors.feetech import FeetechMotorsBus
 
 CALIBRATION_PATH = (
     Path.home()
-    / ".cache/huggingface/lerobot/calibration/robots/so_follower/carpaldactyl_follower.json"
+    / ".cache/huggingface/lerobot/calibration/robots/so_follower/brachiomimus_follower.json"
 )
 
 
