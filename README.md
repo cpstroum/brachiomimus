@@ -69,3 +69,122 @@ with open(calibration_path) as f:
 calibration = {name: MotorCalibration(**fields) for name, fields in data.items()}
 bus = FeetechMotorsBus(port=port, motors=motors, calibration=calibration)
 ```
+
+## Training a policy (leader + follower + webcam)
+
+Everything below uses LeRobot's built-in CLI (`lerobot-*` commands) rather than
+custom scripts — it handles the dataset format, image encoding, and training
+loop for you. Substitute your own ports, arm IDs, and `$HF_USER`.
+
+### 1. Find your webcam
+
+```bash
+lerobot-find-cameras opencv
+```
+
+This lists each detected camera with its index/path (`0`, `1`, `/dev/video0`,
+...). Use that value as `index_or_path` below.
+
+### 2. Calibrate the leader arm
+
+Same idea as the follower calibration already documented above, but for the
+teleoperator:
+
+```bash
+lerobot-calibrate --teleop.type=so101_leader --teleop.port=/dev/ttyACM1 --teleop.id=brachiomimus_leader
+```
+
+Saved to `~/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/brachiomimus_leader.json`.
+
+### 3. Teleoperate (sanity check before recording)
+
+```bash
+lerobot-teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=brachiomimus_follower \
+    --robot.cameras="{front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=brachiomimus_leader \
+    --display_data=true
+```
+
+`--display_data=true` opens a window showing the live webcam feed alongside
+joint positions — confirm the camera is framed on the workspace before
+recording.
+
+### 4. Record a demonstration dataset
+
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=brachiomimus_follower \
+    --robot.cameras="{front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=brachiomimus_leader \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/brachiomimus-so101 \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Describe the task in a few words" \
+    --dataset.push_to_hub=false
+```
+
+- `--dataset.single_task` is the natural-language task description saved with
+  every episode (keep it consistent across episodes for the same task).
+- Drop `--dataset.push_to_hub=false` (or set it to `true`) once you've run
+  `huggingface-cli login` and want the dataset backed up to the Hub.
+- During recording, LeRobot walks you through each episode and a reset phase;
+  check the on-screen prompts for keyboard shortcuts (re-record last episode,
+  early-stop, etc).
+
+Recorded locally at `~/.cache/huggingface/lerobot/{repo_id}`.
+
+### 5. Sanity-check a recorded episode
+
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=brachiomimus_follower \
+    --dataset.repo_id=${HF_USER}/brachiomimus-so101 \
+    --dataset.episode=0
+```
+
+This drives the follower arm through the recorded actions with no leader
+attached — a good way to confirm the dataset actually captured what you
+intended before spending time training on it.
+
+### 6. Train a policy
+
+```bash
+lerobot-train \
+    --dataset.repo_id=${HF_USER}/brachiomimus-so101 \
+    --policy.type=act \
+    --output_dir=outputs/train/act_brachiomimus \
+    --job_name=act_brachiomimus \
+    --policy.device=cuda \
+    --wandb.enable=false
+```
+
+Use `--policy.device=mps` on Apple Silicon or `cpu` if you have no GPU (much
+slower). Checkpoints land in `outputs/train/act_brachiomimus/checkpoints/`.
+
+### 7. Run the trained policy on the robot
+
+```bash
+lerobot-rollout \
+    --strategy.type=base \
+    --policy.path=outputs/train/act_brachiomimus/checkpoints/last/pretrained_model \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=brachiomimus_follower \
+    --robot.cameras="{front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \
+    --task="Describe the task in a few words" \
+    --duration=60
+```
+
+No leader arm needed here — the policy is driving the follower directly from
+camera + joint observations.
