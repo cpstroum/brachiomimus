@@ -85,6 +85,18 @@ lerobot-find-cameras opencv
 This lists each detected camera with its index/path (`0`, `1`, `/dev/video0`,
 ...). Use that value as `index_or_path` below.
 
+**Windows gotchas:**
+- `[ERROR:0@...] obsensor_uvc_stream_channel.cpp ... Camera index out of range` —
+  harmless. OpenCV is just probing for Orbbec/RealSense-style sensors across a
+  range of indices; it's unrelated to your webcam.
+- If one index times out with `Timed out waiting for frame from camera
+  OpenCVCamera(N)`, something else likely has that device open (Teams, Zoom,
+  the Windows Camera app) or it's the wrong/virtual device — try the other
+  indices it found.
+- Check `outputs\captured_images` after running the command — it saves a
+  snapshot per working camera, so you can open them and see which index is
+  actually your webcam before wiring it into the commands below.
+
 ### 2. Calibrate the leader arm
 
 Same idea as the follower calibration already documented above, but for the
