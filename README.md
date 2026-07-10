@@ -12,6 +12,8 @@ computer, calibrated, and moving on its own. Once that's working:
   Rex and record a demonstration dataset with a webcam
 - **[TRAINING.md](TRAINING.md)** — train a policy on that dataset and run it
   on the robot
+- **[MUSIC.md](MUSIC.md)** — make Brachiomimus dance to music playing on your
+  computer
 
 Ports/IDs in the commands below are examples — substitute your own (`COM3`
 on Windows, `/dev/ttyACM0` on Linux, etc).
