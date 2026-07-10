@@ -83,8 +83,9 @@ lerobot-record \
 
 - `--dataset.single_task` is the natural-language task description saved with
   every episode (keep it consistent across episodes for the same task).
-- Drop `--dataset.push_to_hub=false` (or set it to `true`) once you've run
-  `huggingface-cli login` and want the dataset backed up to the Hub.
+- Drop `--dataset.push_to_hub=false` (or set it to `true`) once you've logged
+  in and want the dataset backed up to the Hub — see
+  [Push the dataset to the Hugging Face Hub](#push-the-dataset-to-the-hugging-face-hub) below.
 - During recording, LeRobot walks you through each episode and a reset phase;
   check the on-screen prompts for keyboard shortcuts (re-record last episode,
   early-stop, etc).
@@ -105,5 +106,56 @@ lerobot-replay \
 This drives Brachiomimus through the recorded actions with no leader
 attached — a good way to confirm the dataset actually captured what you
 intended before spending time training on it.
+
+## Push the dataset to the Hugging Face Hub
+
+Backing the dataset up to the Hub is optional — everything already lives
+locally under `--dataset.root` (or the default cache). Push it if you want a
+remote copy, want to train on another machine, or want to share it.
+
+Either way, log in first:
+
+```bash
+hf auth login
+```
+
+This replaces the deprecated `huggingface-cli login`. Paste a token with
+**write** access from <https://huggingface.co/settings/tokens>. The
+`repo_id` namespace must be your own account (`${HF_USER}/...`) for the push
+to succeed.
+
+**Option A — push automatically at the end of recording.** Flip the flag on
+`lerobot-record` (from the [record command](#record-a-demonstration-dataset-optional)
+above):
+
+```bash
+    --dataset.repo_id=${HF_USER}/brachiomimus-so101 \
+    --dataset.push_to_hub=true \
+    --dataset.private=true          # optional; omit to publish publicly
+```
+
+LeRobot writes the dataset locally first, then uploads everything (videos +
+joint/action data + task metadata) once all episodes are recorded. A failed
+upload at the last episode is annoying, so for a first run you may prefer
+Option B.
+
+**Option B — push an already-recorded dataset later.** If you recorded with
+`--dataset.push_to_hub=false`, point `LeRobotDataset` at the local root and
+call `push_to_hub()`:
+
+```python
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+# root is whatever you passed to --dataset.root when recording
+ds = LeRobotDataset("${HF_USER}/brachiomimus-so101", root="D:/lerobot/brachiomimus-so101")
+ds.push_to_hub(private=True)        # drop private=True to publish publicly
+```
+
+Notes:
+- Datasets are **public by default** — pass `--dataset.private=true` (Option A)
+  or `private=True` (Option B) to keep it to yourself.
+- Pushing never deletes the local copy; you always keep both.
+- 50 episodes of 640×480 video is a few GB, so expect the upload to take a
+  while on a typical connection.
 
 Dataset ready? Move on to [TRAINING.md](TRAINING.md).
