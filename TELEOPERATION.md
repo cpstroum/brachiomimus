@@ -1,8 +1,9 @@
 # Teleoperation & recording
 
-Drive Brachiomimus (follower) with Brachius Rex (leader) and record a
-demonstration dataset with a webcam, for training in
-[TRAINING.md](TRAINING.md).
+Drive Brachiomimus (follower) with Brachius Rex (leader). Recording a
+demonstration dataset with a webcam is optional — do it if you're heading
+toward training a policy in [TRAINING.md](TRAINING.md); skip it if you just
+want to puppeteer the arm.
 
 Assumes both arms are already calibrated — see the [Calibration](README.md#calibration)
 section in the getting-started doc.
@@ -43,7 +44,7 @@ Camera framing checklist before recording:
 - The camera is rigidly mounted and won't shift between episodes.
 - The scene behind the workspace stays the same for the whole dataset.
 
-## Teleoperate (sanity check before recording)
+## Teleoperate
 
 ```bash
 lerobot-teleoperate \
@@ -58,10 +59,11 @@ lerobot-teleoperate \
 ```
 
 `--display_data=true` opens a window showing the live webcam feed alongside
-joint positions — confirm the camera is framed on the workspace before
-recording.
+joint positions. This alone is a complete session — nothing is saved, so
+it's a good way to check the camera framing and practice driving Brachiomimus
+before committing to a recording, or just to puppeteer it for fun.
 
-## Record a demonstration dataset
+## Record a demonstration dataset (optional)
 
 ```bash
 lerobot-record \
