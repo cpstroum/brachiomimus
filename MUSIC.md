@@ -16,10 +16,13 @@ Assumes the follower is already calibrated — see the
 ## Setup
 
 ```bash
-pip install sounddevice numpy soundfile
+pip install sounddevice numpy soundfile soundcard
 ```
 
 (`lerobot` should already be installed from the getting-started steps.)
+`soundcard` is only needed for `--audio-source loopback` — plain
+`sounddevice`/PortAudio has no WASAPI loopback support, so loopback capture
+goes through `soundcard` instead, which talks to WASAPI directly.
 
 ## Audio source
 
@@ -63,11 +66,11 @@ detector is actually tracking the song's rhythm, and for tuning
 
 ## Windows notes
 
-- `--audio-source loopback` uses WASAPI loopback under the hood
-  (`sounddevice`'s `WasapiSettings(loopback=True)`) — no extra install beyond
-  the `pip install` above, but it captures whatever the *default* Windows
-  playback device is. If nothing seems to register, check that your music
-  player is actually outputting to that device (Windows Sound settings).
+- `--audio-source loopback` uses `soundcard` to capture the *default* Windows
+  playback device via WASAPI. If nothing seems to register, check that your
+  music player is actually outputting to that device (Windows Sound
+  settings) — it isn't tied to any particular player, just whatever Windows
+  currently treats as the default output.
 - Same serial port notes as the rest of the docs apply — find your port with
   `[System.IO.Ports.SerialPort]::GetPortNames()` (see
   [README.md](README.md#finding-your-serial-port)).

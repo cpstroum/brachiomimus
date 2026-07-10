@@ -5,8 +5,9 @@ Three interchangeable sources, all producing the same thing: fixed-size
 mono float32 blocks pushed into a queue that the control loop drains.
 
   - MicSource       — default microphone input
-  - LoopbackSource  — the machine's own audio output, captured digitally
-                       (WASAPI loopback via sounddevice; no extra dependency)
+  - LoopbackSource  — the machine's own audio output, captured digitally via
+                       WASAPI loopback (needs the `soundcard` package —
+                       plain `sounddevice`/PortAudio has no loopback support)
   - FileSource      — plays a WAV/MP3 through the speakers while analyzing
                        the exact same samples, so the arm reacts in sync
                        with what you actually hear
@@ -15,6 +16,7 @@ Swap sources with dance.py's --audio-source flag; no code changes needed.
 """
 
 import queue
+import threading
 
 import numpy as np
 import sounddevice as sd
@@ -78,24 +80,38 @@ class MicSource(_QueueSource):
 
 
 class LoopbackSource(_QueueSource):
-    """Captures the default output device's audio via WASAPI loopback."""
+    """Captures the default output device's audio via WASAPI loopback.
+
+    PortAudio (what `sounddevice` wraps) has no loopback support, so this
+    uses `soundcard` instead, which talks to WASAPI directly and exposes the
+    default speaker as a recordable "loopback microphone".
+    """
+
+    def __init__(self, samplerate: int, blocksize: int):
+        super().__init__(samplerate, blocksize)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        device_info = sd.query_devices(kind="output")
-        channels = device_info["max_output_channels"]
+        import soundcard as sc
 
-        def callback(indata, frames, time_info, status):
-            self._push(np.mean(indata, axis=1).astype(np.float32))
+        speaker = sc.default_speaker()
+        mic = sc.get_microphone(id=speaker.id, include_loopback=True)
 
-        self._stream = sd.InputStream(
-            samplerate=self.samplerate,
-            blocksize=self.blocksize,
-            channels=channels,
-            device=device_info["index"] if "index" in device_info else None,
-            extra_settings=sd.WasapiSettings(loopback=True),
-            callback=callback,
-        )
-        self._stream.start()
+        def capture() -> None:
+            with mic.recorder(samplerate=self.samplerate, blocksize=self.blocksize) as recorder:
+                while not self._stop_event.is_set():
+                    data = recorder.record(numframes=self.blocksize)
+                    self._push(np.mean(data, axis=1).astype(np.float32))
+
+        self._thread = threading.Thread(target=capture, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
 
 
 class FileSource(_QueueSource):
