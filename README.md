@@ -55,6 +55,18 @@ lerobot-calibrate --teleop.type=so101_leader --teleop.port=/dev/ttyACM1 --teleop
 joint *before* launching the script — not just when prompted. If a joint is
 too far off-center, LeRobot will crash with a `Magnitude exceeds 2047` error.
 
+**Recalibration can also happen automatically** — if `lerobot-record` or
+`lerobot-teleoperate` can't find a valid calibration file for an arm's id, it
+walks you through calibrating right there before connecting. Safe to redo any
+time; it only overwrites that arm's calibration file and doesn't affect
+episodes you've already recorded.
+
+**Gripper tip:** when calibrating the leader, sweep the trigger slowly
+through its *entire* physical range (fully relaxed to fully squeezed) rather
+than snapping between the two extremes. A quick snap captures a too-narrow
+min/max, which makes the follower's gripper feel like a binary on/off switch
+instead of responding proportionally to how hard you squeeze.
+
 ## Wave demo — direct scripted control of Brachiomimus
 
 A standalone demo that drives Brachiomimus (the follower) straight through a
