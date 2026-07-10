@@ -19,6 +19,7 @@ import ctypes
 import queue
 import sys
 import threading
+import warnings
 
 import numpy as np
 import sounddevice as sd
@@ -113,7 +114,12 @@ class LoopbackSource(_QueueSource):
             try:
                 with mic.recorder(samplerate=self.samplerate, blocksize=self.blocksize) as recorder:
                     while not self._stop_event.is_set():
-                        data = recorder.record(numframes=self.blocksize)
+                        # soundcard occasionally warns about minor buffer
+                        # discontinuities from polling record() in a loop -
+                        # harmless for RMS/beat analysis, so silence the spam.
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", message="data discontinuity in recording")
+                            data = recorder.record(numframes=self.blocksize)
                         self._push(np.mean(data, axis=1).astype(np.float32))
             finally:
                 if com_initialized:

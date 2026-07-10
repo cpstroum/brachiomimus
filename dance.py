@@ -2,10 +2,11 @@
 dance.py — make Brachiomimus move to music.
 
 Two audio features drive the arm, computed live every tick:
-  - loudness (smoothed RMS envelope)  -> how big/extended the pose is
-  - beat (energy-based onset detector) -> a short punctuated accent added
-    on top, so it looks like it's hitting the beat, not just breathing
-    with the volume
+  - loudness (smoothed RMS envelope)  -> how big the raise/sway is
+  - beat (energy-based onset detector) -> punctuated accents added on top:
+    the gripper snaps open then eases shut, the wrist gives a twist, and the
+    shoulder swings to the opposite side, so it looks like it's hitting the
+    beat, not just breathing with the volume
 
 Usage:
     python dance.py --port /dev/ttyUSB0 --audio-source mic
@@ -25,7 +26,13 @@ import numpy as np
 
 from audio_source import create_source
 from lerobot.motors.feetech import FeetechMotorsBus
-from wave import CALIBRATION_PATH, MOTORS, REST_POSE, load_calibration
+from wave import CALIBRATION_PATH, MOTORS, REST_POSE, WAVE_READY_POSE, load_calibration
+
+# On shutdown, ramp to this raised/curled pose instead of REST_POSE - REST_POSE
+# is flat (all zeros) and lets the arm sag/collapse onto the table once torque
+# is enabled again; WAVE_READY_POSE is the same tucked-up raised pose wave.py
+# already uses and is known to be a safe, calibrated resting configuration.
+CURL_POSE = WAVE_READY_POSE
 
 SAMPLE_RATE = 44100
 BLOCK_SIZE = 1024  # ~23ms per block at 44.1kHz
@@ -42,8 +49,19 @@ DANCE_POSE = {
     "gripper": 0.0,
 }
 
-BEAT_JOINT = "wrist_roll"
-BEAT_PULSE_DEG = 25.0
+# Continuous side-to-side sway: shoulder_pan swings toward +/- SWAY_DEG,
+# scaled by loudness. Direction flips on every detected beat, so the swing
+# itself lands on the rhythm instead of drifting on its own free-running period.
+SWAY_JOINT = "shoulder_pan"
+SWAY_DEG = 35.0
+
+# Punctuated accents added on top of the pose for the duration of a beat's
+# decaying pulse: a wrist twist plus a gripper "chomp" (open on the beat,
+# springs back shut as the pulse decays).
+BEAT_PULSES = {
+    "wrist_roll": 25.0,
+    "gripper": 45.0,
+}
 BEAT_DECAY_SECONDS = 0.2
 
 
@@ -139,6 +157,7 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
     current_pose = dict(REST_POSE)
     loudness = 0.0
     pulse_level = 0.0
+    sway_direction = 1.0
     tick_period = 1.0 / TICK_HZ
 
     try:
@@ -149,12 +168,15 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
                 loudness = envelope.update(block)
                 if beat.update(block, tick_start):
                     pulse_level = 1.0
+                    sway_direction *= -1.0
                     print("beat")
 
             pulse_level *= math.exp(-tick_period / BEAT_DECAY_SECONDS)
 
             target = blend(REST_POSE, DANCE_POSE, loudness)
-            target[BEAT_JOINT] += BEAT_PULSE_DEG * pulse_level
+            target[SWAY_JOINT] += SWAY_DEG * loudness * sway_direction
+            for joint, pulse_deg in BEAT_PULSES.items():
+                target[joint] += pulse_deg * pulse_level
 
             current_pose = clamp_step(current_pose, target, MAX_STEP_DEG)
 
@@ -172,7 +194,7 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
         if bus is not None:
             pose = current_pose
             for _ in range(20):
-                pose = clamp_step(pose, REST_POSE, MAX_STEP_DEG)
+                pose = clamp_step(pose, CURL_POSE, MAX_STEP_DEG)
                 bus.sync_write("Goal_Position", pose)
                 time.sleep(0.05)
             bus.sync_write("Torque_Enable", 0)

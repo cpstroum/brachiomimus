@@ -3,12 +3,14 @@
 Make Brachiomimus move along with whatever's playing on your computer, via
 `dance.py`. Two things drive the motion, computed live from the audio:
 
-- **Loudness** — a smoothed volume envelope sets how big/extended the pose is
-  right now (quiet → near rest, loud → fully raised).
+- **Loudness** — a smoothed volume envelope sets how big/extended the raise
+  and side-to-side sway are right now (quiet → near rest, loud → fully
+  raised and swinging wide).
 - **Beat** — a lightweight onset detector flags a hit whenever a block's
-  energy spikes above the recent local average, and each hit adds a short
-  decaying pulse on top of the pose, so it looks like it's hitting the beat
-  instead of just following volume.
+  energy spikes above the recent local average. Each hit: flips which way
+  the next sway swings, gives the wrist a twist, and pops the gripper open
+  before it eases back shut — so it looks like it's hitting the beat instead
+  of just following volume.
 
 Assumes the follower is already calibrated — see the
 [Calibration](README.md#calibration) section in the getting-started doc.
@@ -77,5 +79,6 @@ detector is actually tracking the song's rhythm, and for tuning
 
 ## Stopping
 
-Ctrl+C ramps the arm back to rest and disables torque before exiting — same
-shutdown behavior as `wave.py`.
+Ctrl+C ramps the arm to a raised, tucked pose (the same one `wave.py` uses
+for `WAVE_READY_POSE`) before disabling torque and exiting — not the flat
+rest pose, which would let it sag onto the table once torque cuts.
