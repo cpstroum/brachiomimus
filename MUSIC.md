@@ -9,10 +9,10 @@ Make Brachiomimus move along with whatever's playing on your computer, via
   drum/bassline territory). On each beat the arm flips to new held targets
   and then ramps smoothly toward them until the next beat:
   - the **gripper opens and closes** in time with the music (a pincer clench
-    on each beat)
-  - the **wrist twists** the opposite way
-  - the **shoulder sways** side to side at half-time (every other beat), so
-    the swing reads as a smooth groove rather than lurching on every beat
+    on every beat)
+  - the **wrist twists** and the **shoulder sways** side to side at half-time
+    (every other beat, in opposition), so the arm grooves rather than
+    lurching on every beat — the pincer carries the beat, the body keeps time
 
   It only watches the bass band because hi-hats, cymbals, and vocals spike
   far more often than the real tempo — that was what made earlier versions
@@ -92,9 +92,39 @@ There's also `--dry-run`, which prints the full computed pose every tick
 (not just beats) without moving the arm — more detail than you usually need,
 but handy if you want to see the exact joint targets.
 
-The pose amounts (sway/twist/gripper degrees, ramp speeds) are constants near
-the top of `dance.py` if you want to make the moves bigger, smaller, or
-snappier.
+## Calmer motion
+
+If it feels too wild, turn down `--intensity` (default `1.0`) — it scales the
+sway and twist size (the pincer still fully opens/closes on the beat):
+
+```bash
+python dance.py --port COM4 --audio-source loopback --intensity 0.5
+```
+
+## Making the pincer actually close
+
+The gripper opens/closes between two angles that default to `0` (closed) and
+`45` (open) **in degrees**. But your arm's calibrated `0` isn't necessarily
+its closed position — on some builds `0` is fully *open*, so the pincer never
+appears to close. Find your real values:
+
+```bash
+python dance.py --port COM4 --read-gripper
+```
+
+This frees just the gripper (the rest of the arm holds still) and prints its
+live angle. Squeeze it fully closed and note the number, open it fully and
+note that one, then pass both:
+
+```bash
+python dance.py --port COM4 --audio-source loopback \
+    --gripper-closed 55 --gripper-open 5
+```
+
+(The two can be in either order / either sign — whatever your arm reads.)
+
+The remaining pose amounts (sway/twist degrees, ramp speeds) are constants
+near the top of `dance.py` if you want to change them further.
 
 ## Windows notes
 

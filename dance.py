@@ -218,6 +218,37 @@ def estimate_bpm(beat_times: collections.deque[float]) -> float | None:
     return 60.0 / median if median > 0 else None
 
 
+def read_gripper(port: str) -> None:
+    """Release the gripper (holding the rest of the arm still) and print its
+    live angle, so you can hand-move it to fully closed and fully open and read
+    off the two numbers to pass to --gripper-closed / --gripper-open.
+
+    Needed because the gripper's calibrated zero isn't necessarily its closed
+    position - on some arms 0 deg is fully open."""
+    calibration = load_calibration(CALIBRATION_PATH)
+    bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
+    bus.connect()
+    try:
+        # Hold the arm wherever it is now, then free only the gripper.
+        present = bus.sync_read("Present_Position")
+        bus.sync_write("Goal_Position", present)
+        bus.sync_write("Torque_Enable", 1)
+        bus.sync_write("Torque_Enable", {GRIPPER_JOINT: 0})
+        print("Gripper released. Squeeze it fully CLOSED, read the angle; then")
+        print("fully OPEN, read that angle. Pass them to --gripper-closed /")
+        print("--gripper-open. Ctrl+C when done.")
+        while True:
+            pos = bus.sync_read("Present_Position")
+            print(f"  gripper: {pos[GRIPPER_JOINT]:7.1f} deg   ", end="\r", flush=True)
+            time.sleep(0.15)
+    except KeyboardInterrupt:
+        print()
+    finally:
+        bus.sync_write("Torque_Enable", 0)
+        bus.disconnect()
+        print("Done.")
+
+
 def run(
     port: str,
     audio_source_kind: str,
@@ -225,6 +256,9 @@ def run(
     dry_run: bool,
     monitor: bool,
     sensitivity: float,
+    gripper_closed: float = GRIPPER_CLOSED_DEG,
+    gripper_open_deg: float = GRIPPER_OPEN_DEG,
+    intensity: float = 1.0,
 ) -> None:
     # monitor = beats-only tuning mode: no arm, no per-tick pose spam, just a
     # live BPM readout so you can dial in --sensitivity against any source
@@ -285,19 +319,23 @@ def run(
 
             # Held motion states derived from the beat count, so they only
             # change on a beat and then ramp smoothly toward the new target.
-            # The gripper and twist flip every beat (pincer opens/closes in
-            # time with the music); the sway flips every *other* beat - a
-            # half-time swing reads much smoother than lurching side to side
-            # on every single beat.
-            gripper_open = beat_count % 2 == 1
-            twist_direction = 1.0 if beat_count % 2 == 0 else -1.0
+            # The pincer opens/closes on *every* beat; the sway and twist move
+            # at half-time (every other beat) and in opposition to each other,
+            # so the arm grooves rather than lurching on every single beat -
+            # much calmer at faster tempos while the pincer still hits the beat.
+            pincer_open = beat_count % 2 == 1
             sway_direction = 1.0 if beat_count % 4 < 2 else -1.0
+            twist_direction = -sway_direction
 
             target = blend(REST_POSE, DANCE_POSE, loudness)
-            target[SWAY_JOINT] += SWAY_DEG * loudness * sway_direction
-            target[TWIST_JOINT] += TWIST_DEG * loudness * twist_direction
-            open_amount = GRIPPER_OPEN_DEG if gripper_open else GRIPPER_CLOSED_DEG
-            target[GRIPPER_JOINT] = open_amount * loudness
+            target[SWAY_JOINT] += SWAY_DEG * loudness * intensity * sway_direction
+            target[TWIST_JOINT] += TWIST_DEG * loudness * intensity * twist_direction
+            # Closed is always *fully* closed; open scales from closed->open with
+            # loudness, so quiet passages only part the pincer a little.
+            if pincer_open:
+                target[GRIPPER_JOINT] = gripper_closed + (gripper_open_deg - gripper_closed) * loudness
+            else:
+                target[GRIPPER_JOINT] = gripper_closed
 
             current_pose = clamp_step(current_pose, target, MAX_STEP_DEG, JOINT_MAX_STEP)
 
@@ -313,9 +351,12 @@ def run(
     finally:
         source.stop()
         if bus is not None:
+            # Curl up with the pincer closed (not the pose's default 0, which
+            # may be open on this arm).
+            curl_target = {**CURL_POSE, GRIPPER_JOINT: gripper_closed}
             pose = current_pose
             for _ in range(20):
-                pose = clamp_step(pose, CURL_POSE, MAX_STEP_DEG)
+                pose = clamp_step(pose, curl_target, MAX_STEP_DEG)
                 bus.sync_write("Goal_Position", pose)
                 time.sleep(0.05)
             bus.sync_write("Torque_Enable", 0)
@@ -352,5 +393,31 @@ if __name__ == "__main__":
         help="Beat detector threshold (default: 1.8). Raise it if the arm "
              "reacts to more than the actual beat; lower it if it misses beats."
     )
+    parser.add_argument(
+        "--intensity", type=float, default=1.0,
+        help="Scale the sway/twist size (default: 1.0). Lower it (e.g. 0.5) "
+             "for calmer motion at faster tempos."
+    )
+    parser.add_argument(
+        "--gripper-closed", type=float, default=GRIPPER_CLOSED_DEG,
+        help=f"Gripper angle that is FULLY CLOSED on your arm (default: "
+             f"{GRIPPER_CLOSED_DEG}). If the pincer never closes, this is "
+             f"wrong for your calibration - find it with --read-gripper."
+    )
+    parser.add_argument(
+        "--gripper-open", type=float, default=GRIPPER_OPEN_DEG,
+        help=f"Gripper angle that is fully open (default: {GRIPPER_OPEN_DEG})."
+    )
+    parser.add_argument(
+        "--read-gripper", action="store_true",
+        help="Release the gripper and print its live angle so you can read off "
+             "your closed/open values, then exit. Needs --port."
+    )
     args = parser.parse_args()
-    run(args.port, args.audio_source, args.file, args.dry_run, args.monitor, args.sensitivity)
+    if args.read_gripper:
+        read_gripper(args.port)
+    else:
+        run(
+            args.port, args.audio_source, args.file, args.dry_run, args.monitor,
+            args.sensitivity, args.gripper_closed, args.gripper_open, args.intensity,
+        )
