@@ -15,7 +15,9 @@ mono float32 blocks pushed into a queue that the control loop drains.
 Swap sources with dance.py's --audio-source flag; no code changes needed.
 """
 
+import ctypes
 import queue
+import sys
 import threading
 
 import numpy as np
@@ -99,10 +101,23 @@ class LoopbackSource(_QueueSource):
         mic = sc.get_microphone(id=speaker.id, include_loopback=True)
 
         def capture() -> None:
-            with mic.recorder(samplerate=self.samplerate, blocksize=self.blocksize) as recorder:
-                while not self._stop_event.is_set():
-                    data = recorder.record(numframes=self.blocksize)
-                    self._push(np.mean(data, axis=1).astype(np.float32))
+            # COM is per-thread on Windows; soundcard's WASAPI backend makes
+            # COM calls (CoCreateInstance etc.) the first time this thread
+            # touches `mic`, and that fails with CO_E_NOTINITIALIZED unless
+            # this thread has its own COM apartment initialized first.
+            com_initialized = False
+            if sys.platform == "win32":
+                COINIT_MULTITHREADED = 0x0
+                ctypes.windll.ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+                com_initialized = True
+            try:
+                with mic.recorder(samplerate=self.samplerate, blocksize=self.blocksize) as recorder:
+                    while not self._stop_event.is_set():
+                        data = recorder.record(numframes=self.blocksize)
+                        self._push(np.mean(data, axis=1).astype(np.float32))
+            finally:
+                if com_initialized:
+                    ctypes.windll.ole32.CoUninitialize()
 
         self._thread = threading.Thread(target=capture, daemon=True)
         self._thread.start()
