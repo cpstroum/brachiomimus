@@ -2,11 +2,18 @@
 dance.py — make Brachiomimus move to music.
 
 Two audio features drive the arm, computed live every tick:
-  - loudness (smoothed RMS envelope)  -> how big the raise/sway is
-  - beat (energy-based onset detector) -> punctuated accents added on top:
-    the gripper snaps open then eases shut, the wrist gives a twist, and the
-    shoulder swings to the opposite side, so it looks like it's hitting the
-    beat, not just breathing with the volume
+  - loudness (smoothed RMS envelope over the whole signal) -> how big the
+    raise/sway is
+  - beat (onset detector watching just the bass band, ~20-150Hz) ->
+    punctuated accents added on top: the gripper snaps open then eases shut,
+    the wrist gives a twist, and the shoulder swings to the opposite side
+
+Beat detection deliberately looks at bass energy rather than the full
+signal - hi-hats, cymbals, and vocals spike the broadband energy far more
+often than the actual tempo, which reads as chaotic/too-fast on anything
+that isn't a wall of noise. Kick drums and basslines are usually what
+actually carries a song's beat, so filtering down to that band gives
+motion that tracks the song's real pace instead of every little transient.
 
 Usage:
     python dance.py --port /dev/ttyUSB0 --audio-source mic
@@ -98,16 +105,29 @@ class EnvelopeFollower:
         return min(1.0, self.level / self.ceiling)
 
 
+def bass_energy(block: np.ndarray, samplerate: int, max_freq: float = 150.0) -> float:
+    """Power in the block confined to the bass band (kick drum/bassline
+    territory) - what BeatDetector should watch instead of full-band energy."""
+    spectrum = np.fft.rfft(block)
+    freqs = np.fft.rfftfreq(len(block), d=1.0 / samplerate)
+    band = spectrum[freqs <= max_freq]
+    if band.size == 0:
+        return 0.0
+    return float(np.mean(np.abs(band) ** 2))
+
+
 class BeatDetector:
-    """Energy-based onset detector: flags a beat when a block's energy
-    spikes above the recent local average, gated by a refractory period."""
+    """Onset detector: flags a beat when the current energy value spikes
+    above the recent local average, gated by a refractory period so a single
+    hit's decay tail can't double-trigger. Feed it a narrowband energy (see
+    bass_energy) rather than full-signal energy for musically-meaningful hits."""
 
     def __init__(
         self,
         block_seconds: float,
         history_seconds: float = 1.0,
-        sensitivity: float = 1.4,
-        refractory_seconds: float = 0.15,
+        sensitivity: float = 1.6,
+        refractory_seconds: float = 0.25,
     ):
         self.history: collections.deque[float] = collections.deque(
             maxlen=max(1, int(history_seconds / block_seconds))
@@ -116,8 +136,7 @@ class BeatDetector:
         self.refractory_seconds = refractory_seconds
         self._last_beat_time = -math.inf
 
-    def update(self, block: np.ndarray, now: float) -> bool:
-        energy = float(np.mean(np.square(block)))
+    def update(self, energy: float, now: float) -> bool:
         is_beat = False
         if self.history:
             average = sum(self.history) / len(self.history)
@@ -166,7 +185,7 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
             block = source.get_block(timeout=tick_period)
             if block is not None:
                 loudness = envelope.update(block)
-                if beat.update(block, tick_start):
+                if beat.update(bass_energy(block, SAMPLE_RATE), tick_start):
                     pulse_level = 1.0
                     sway_direction *= -1.0
                     print("beat")

@@ -6,11 +6,13 @@ Make Brachiomimus move along with whatever's playing on your computer, via
 - **Loudness** — a smoothed volume envelope sets how big/extended the raise
   and side-to-side sway are right now (quiet → near rest, loud → fully
   raised and swinging wide).
-- **Beat** — a lightweight onset detector flags a hit whenever a block's
-  energy spikes above the recent local average. Each hit: flips which way
-  the next sway swings, gives the wrist a twist, and pops the gripper open
-  before it eases back shut — so it looks like it's hitting the beat instead
-  of just following volume.
+- **Beat** — an onset detector watches just the bass band (~20-150Hz, kick
+  drum/bassline territory) and flags a hit whenever that spikes above the
+  recent local average. It deliberately ignores hi-hats, cymbals, and vocals
+  — those spike far more often than the actual tempo and made everything
+  feel chaotic/too-fast, especially on slower songs. Each hit: flips which
+  way the next sway swings, gives the wrist a twist, and pops the gripper
+  open before it eases back shut.
 
 Assumes the follower is already calibrated — see the
 [Calibration](README.md#calibration) section in the getting-started doc.
