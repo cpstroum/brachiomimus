@@ -1,0 +1,134 @@
+"""
+wave.py — make the SO-101 follower arm do a waving motion.
+
+Usage:
+    python wave.py [--port /dev/ttyUSB0] [--reps 3]
+
+The script:
+  1. Connects to the arm via its USB serial port
+  2. Moves to a raised "wave ready" pose
+  3. Rocks the wrist left-right N times
+  4. Returns to the rest pose and disables torque
+
+Joint names (SO-101, 6 motors):
+  shoulder_pan, shoulder_lift, elbow_flex,
+  wrist_flex, wrist_roll, gripper
+"""
+
+import argparse
+import json
+import time
+from pathlib import Path
+
+from lerobot.motors import Motor, MotorCalibration, MotorNormMode
+from lerobot.motors.feetech import FeetechMotorsBus
+
+CALIBRATION_PATH = (
+    Path.home()
+    / ".cache/huggingface/lerobot/calibration/robots/so_follower/brachiomimus_follower.json"
+)
+
+
+def load_calibration(path: Path) -> dict[str, MotorCalibration]:
+    with open(path) as f:
+        data = json.load(f)
+    return {
+        name: MotorCalibration(**fields)
+        for name, fields in data.items()
+    }
+
+
+# ---------------------------------------------------------------------------
+# Motor configuration
+# ---------------------------------------------------------------------------
+MOTORS = {
+    "shoulder_pan":  Motor(id=1, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "shoulder_lift": Motor(id=2, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "elbow_flex":    Motor(id=3, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "wrist_flex":    Motor(id=4, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "wrist_roll":    Motor(id=5, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+    "gripper":       Motor(id=6, model="sts3215", norm_mode=MotorNormMode.DEGREES),
+}
+
+# ---------------------------------------------------------------------------
+# Poses  (values in degrees, centred on 0 = neutral)
+# ---------------------------------------------------------------------------
+REST_POSE = {
+    "shoulder_pan":  0.0,
+    "shoulder_lift": 0.0,
+    "elbow_flex":    0.0,
+    "wrist_flex":    0.0,
+    "wrist_roll":    0.0,
+    "gripper":       0.0,
+}
+
+# Arm raised and angled out so it looks like a raised hand
+WAVE_READY_POSE = {
+    "shoulder_pan":   20.0,   # swing arm slightly outward
+    "shoulder_lift": -90.0,   # lift shoulder up
+    "elbow_flex":     30.0,   # bend elbow so forearm points up
+    "wrist_flex":      0.0,
+    "wrist_roll":      0.0,
+    "gripper":         0.0,
+}
+
+WAVE_LEFT = {**WAVE_READY_POSE, "wrist_roll":  40.0}
+WAVE_RIGHT = {**WAVE_READY_POSE, "wrist_roll": -40.0}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def move_to(bus: FeetechMotorsBus, pose: dict, duration: float = 1.5) -> None:
+    bus.sync_write("Goal_Position", pose)
+    time.sleep(duration)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def wave(port: str, reps: int) -> None:
+    calibration = load_calibration(CALIBRATION_PATH)
+    bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
+    bus.connect()
+
+    try:
+        bus.sync_write("Torque_Enable", 1)
+
+        print("Moving to rest pose …")
+        move_to(bus, REST_POSE, duration=2.0)
+
+        print("Raising arm …")
+        move_to(bus, WAVE_READY_POSE, duration=2.0)
+
+        print(f"Waving {reps} times …")
+        for _ in range(reps):
+            move_to(bus, WAVE_LEFT,  duration=0.5)
+            move_to(bus, WAVE_RIGHT, duration=0.5)
+
+        move_to(bus, WAVE_READY_POSE, duration=0.5)
+
+        print("Returning to rest …")
+        move_to(bus, REST_POSE, duration=2.0)
+
+    finally:
+        bus.sync_write("Torque_Enable", 0)
+        bus.disconnect()
+        print("Done.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="SO-101 wave demo")
+    parser.add_argument(
+        "--port", default="/dev/ttyUSB0",
+        help="Serial port the arm is connected to (default: /dev/ttyUSB0)"
+    )
+    parser.add_argument(
+        "--reps", type=int, default=3,
+        help="Number of wave repetitions (default: 3)"
+    )
+    args = parser.parse_args()
+    wave(args.port, args.reps)
