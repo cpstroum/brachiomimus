@@ -3,16 +3,22 @@
 Make Brachiomimus move along with whatever's playing on your computer, via
 `dance.py`. Two things drive the motion, computed live from the audio:
 
-- **Loudness** — a smoothed volume envelope sets how big/extended the raise
-  and side-to-side sway are right now (quiet → near rest, loud → fully
-  raised and swinging wide).
+- **Loudness** — a smoothed volume envelope sets how big all the motion is
+  right now (quiet → gentle, loud → big raises, wide swings, full pincer).
 - **Beat** — an onset detector watches just the bass band (~20-150Hz, kick
-  drum/bassline territory) and flags a hit whenever that spikes above the
-  recent local average. It deliberately ignores hi-hats, cymbals, and vocals
-  — those spike far more often than the actual tempo and made everything
-  feel chaotic/too-fast, especially on slower songs. Each hit: flips which
-  way the next sway swings, gives the wrist a twist, and pops the gripper
-  open before it eases back shut.
+  drum/bassline territory). On each beat the arm flips to new held targets
+  and then ramps smoothly toward them until the next beat:
+  - the **gripper opens and closes** in time with the music (a pincer clench
+    on each beat)
+  - the **wrist twists** the opposite way
+  - the **shoulder sways** side to side at half-time (every other beat), so
+    the swing reads as a smooth groove rather than lurching on every beat
+
+  It only watches the bass band because hi-hats, cymbals, and vocals spike
+  far more often than the real tempo — that was what made earlier versions
+  feel chaotic/too-fast, especially on slower songs. A peak-relative
+  threshold further favors the strongest low-end hits (kicks/downbeats) over
+  weaker off-beat bass notes.
 
 Assumes the follower is already calibrated — see the
 [Calibration](README.md#calibration) section in the getting-started doc.
@@ -65,8 +71,25 @@ python dance.py --dry-run --audio-source file --file song.wav
 Runs the full audio → loudness/beat → pose pipeline and prints the computed
 pose every tick (plus a `beat` line each time the beat detector fires)
 instead of sending anything to the arm. Good for checking that the beat
-detector is actually tracking the song's rhythm, and for tuning
-`BEAT_PULSE_DEG` / `MAX_STEP_DEG` in `dance.py` before connecting to hardware.
+detector is actually tracking the song's rhythm before connecting to
+hardware — play a song and watch whether the `beat` lines land at the real
+tempo or fire too often.
+
+## Tuning the beat
+
+If the arm reacts to more than the actual beat (twitchy, too fast), raise
+the detector threshold:
+
+```bash
+python dance.py --port COM4 --audio-source loopback --sensitivity 2.5
+```
+
+`--sensitivity` defaults to `1.8`. Higher = only the strongest hits count
+(fewer, cleaner beats); lower = more sensitive (catches quiet beats but also
+more noise). Dial it against a `--dry-run` on the song you're using until the
+`beat` lines match the tempo. The pose amounts themselves (sway/twist/gripper
+degrees, ramp speed) are constants near the top of `dance.py` if you want to
+make the moves bigger or smaller.
 
 ## Windows notes
 

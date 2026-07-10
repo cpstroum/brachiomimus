@@ -3,17 +3,19 @@ dance.py — make Brachiomimus move to music.
 
 Two audio features drive the arm, computed live every tick:
   - loudness (smoothed RMS envelope over the whole signal) -> how big the
-    raise/sway is
-  - beat (onset detector watching just the bass band, ~20-150Hz) ->
-    punctuated accents added on top: the gripper snaps open then eases shut,
-    the wrist gives a twist, and the shoulder swings to the opposite side
+    raise/sway/twist/pincer motions are
+  - beat (onset detector watching just the bass band, ~20-150Hz) -> on each
+    beat the arm flips to the opposite side, twists the other way, and opens
+    or closes the gripper, then ramps smoothly toward those new targets until
+    the next beat - so it dances *on* the beat rather than twitching.
 
 Beat detection deliberately looks at bass energy rather than the full
 signal - hi-hats, cymbals, and vocals spike the broadband energy far more
 often than the actual tempo, which reads as chaotic/too-fast on anything
 that isn't a wall of noise. Kick drums and basslines are usually what
-actually carries a song's beat, so filtering down to that band gives
-motion that tracks the song's real pace instead of every little transient.
+actually carries a song's beat, so filtering down to that band - plus a
+tempo gate that learns the song's pace - gives motion that tracks the real
+beat instead of every little transient.
 
 Usage:
     python dance.py --port /dev/ttyUSB0 --audio-source mic
@@ -56,20 +58,26 @@ DANCE_POSE = {
     "gripper": 0.0,
 }
 
-# Continuous side-to-side sway: shoulder_pan swings toward +/- SWAY_DEG,
-# scaled by loudness. Direction flips on every detected beat, so the swing
-# itself lands on the rhythm instead of drifting on its own free-running period.
+# Beat-locked motion. These are *held* offsets that only change when a beat
+# fires and then ramp smoothly toward their new target (via clamp_step), rather
+# than fast-decaying transient pulses - held-and-ramping reads as deliberate
+# dancing on the beat, transient pulses read as twitchy/chaotic.
+#
+#   - sway:   shoulder_pan swings to the opposite side on each beat
+#   - twist:  wrist_roll rotates the opposite way on each beat
+#   - pincer: gripper toggles between closed and open on each beat, so it
+#             opens and closes in time with the music
+# All three are scaled by loudness, so quiet passages move gently and loud
+# passages move big.
 SWAY_JOINT = "shoulder_pan"
 SWAY_DEG = 35.0
 
-# Punctuated accents added on top of the pose for the duration of a beat's
-# decaying pulse: a wrist twist plus a gripper "chomp" (open on the beat,
-# springs back shut as the pulse decays).
-BEAT_PULSES = {
-    "wrist_roll": 25.0,
-    "gripper": 45.0,
-}
-BEAT_DECAY_SECONDS = 0.2
+TWIST_JOINT = "wrist_roll"
+TWIST_DEG = 30.0
+
+GRIPPER_JOINT = "gripper"
+GRIPPER_OPEN_DEG = 45.0
+GRIPPER_CLOSED_DEG = 0.0
 
 
 class EnvelopeFollower:
@@ -117,33 +125,62 @@ def bass_energy(block: np.ndarray, samplerate: int, max_freq: float = 150.0) -> 
 
 
 class BeatDetector:
-    """Onset detector: flags a beat when the current energy value spikes
-    above the recent local average, gated by a refractory period so a single
-    hit's decay tail can't double-trigger. Feed it a narrowband energy (see
-    bass_energy) rather than full-signal energy for musically-meaningful hits."""
+    """Onset detector. Flags a beat only when all of these hold:
+
+      - the energy is a strong multiple of the recent local average
+        (`sensitivity`) - an adaptive threshold that tracks the song's level
+      - the energy is near the recent *peak* (`peak_ratio` of a slowly
+        decaying running maximum) - kicks/downbeats dominate the low end, so
+        this is what mostly rejects weaker off-beat bass notes and syncopated
+        basslines that a plain average-relative threshold happily fires on.
+        This is the main lever against "picking up more than the actual beat"
+      - the energy is *rising* vs the previous block - rejects the sustained
+        decay tail of a hit, which otherwise re-triggers for several blocks
+      - it's been at least `refractory_seconds` since the last beat
+
+    Raise `sensitivity`/`peak_ratio` (via dance.py's --sensitivity) if it's
+    still catching too much; lower them if it's missing real beats.
+
+    Feed it a narrowband energy (see bass_energy), not full-signal energy."""
 
     def __init__(
         self,
         block_seconds: float,
-        history_seconds: float = 1.0,
-        sensitivity: float = 1.6,
-        refractory_seconds: float = 0.25,
+        history_seconds: float = 1.5,
+        sensitivity: float = 1.8,
+        peak_ratio: float = 0.65,
+        refractory_seconds: float = 0.3,
     ):
         self.history: collections.deque[float] = collections.deque(
             maxlen=max(1, int(history_seconds / block_seconds))
         )
         self.sensitivity = sensitivity
+        self.peak_ratio = peak_ratio
         self.refractory_seconds = refractory_seconds
+        # Peak decays slowly (~1.6s half-life, a couple of beats) so it stays
+        # near the last strong hit across the gap to the next one, keeping the
+        # peak-relative threshold meaningful between beats.
+        self.peak_decay = 0.5 ** (block_seconds / 1.6)
+        self._peak = 0.0
         self._last_beat_time = -math.inf
+        self._prev_energy = 0.0
 
     def update(self, energy: float, now: float) -> bool:
+        self._peak = max(energy, self._peak * self.peak_decay)
         is_beat = False
         if self.history:
             average = sum(self.history) / len(self.history)
-            if energy > average * self.sensitivity and now - self._last_beat_time > self.refractory_seconds:
+            gap = now - self._last_beat_time
+            if (
+                energy > average * self.sensitivity
+                and energy > self._peak * self.peak_ratio
+                and energy > self._prev_energy
+                and gap > self.refractory_seconds
+            ):
                 is_beat = True
                 self._last_beat_time = now
         self.history.append(energy)
+        self._prev_energy = energy
         return is_beat
 
 
@@ -159,12 +196,18 @@ def clamp_step(current: dict, target: dict, max_step: float) -> dict:
     return out
 
 
-def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool) -> None:
+def run(
+    port: str,
+    audio_source_kind: str,
+    file_path: str | None,
+    dry_run: bool,
+    sensitivity: float,
+) -> None:
     source = create_source(audio_source_kind, SAMPLE_RATE, BLOCK_SIZE, file_path)
     source.start()
 
     envelope = EnvelopeFollower()
-    beat = BeatDetector(block_seconds=BLOCK_SIZE / SAMPLE_RATE)
+    beat = BeatDetector(block_seconds=BLOCK_SIZE / SAMPLE_RATE, sensitivity=sensitivity)
 
     bus = None
     if not dry_run:
@@ -175,8 +218,7 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
 
     current_pose = dict(REST_POSE)
     loudness = 0.0
-    pulse_level = 0.0
-    sway_direction = 1.0
+    beat_count = 0
     tick_period = 1.0 / TICK_HZ
 
     try:
@@ -186,16 +228,24 @@ def run(port: str, audio_source_kind: str, file_path: str | None, dry_run: bool)
             if block is not None:
                 loudness = envelope.update(block)
                 if beat.update(bass_energy(block, SAMPLE_RATE), tick_start):
-                    pulse_level = 1.0
-                    sway_direction *= -1.0
+                    beat_count += 1
                     print("beat")
 
-            pulse_level *= math.exp(-tick_period / BEAT_DECAY_SECONDS)
+            # Held motion states derived from the beat count, so they only
+            # change on a beat and then ramp smoothly toward the new target.
+            # The gripper and twist flip every beat (pincer opens/closes in
+            # time with the music); the sway flips every *other* beat - a
+            # half-time swing reads much smoother than lurching side to side
+            # on every single beat.
+            gripper_open = beat_count % 2 == 1
+            twist_direction = 1.0 if beat_count % 2 == 0 else -1.0
+            sway_direction = 1.0 if beat_count % 4 < 2 else -1.0
 
             target = blend(REST_POSE, DANCE_POSE, loudness)
             target[SWAY_JOINT] += SWAY_DEG * loudness * sway_direction
-            for joint, pulse_deg in BEAT_PULSES.items():
-                target[joint] += pulse_deg * pulse_level
+            target[TWIST_JOINT] += TWIST_DEG * loudness * twist_direction
+            open_amount = GRIPPER_OPEN_DEG if gripper_open else GRIPPER_CLOSED_DEG
+            target[GRIPPER_JOINT] = open_amount * loudness
 
             current_pose = clamp_step(current_pose, target, MAX_STEP_DEG)
 
@@ -239,5 +289,10 @@ if __name__ == "__main__":
         "--dry-run", action="store_true",
         help="Print computed poses instead of sending them to the arm"
     )
+    parser.add_argument(
+        "--sensitivity", type=float, default=1.8,
+        help="Beat detector threshold (default: 1.8). Raise it if the arm "
+             "reacts to more than the actual beat; lower it if it misses beats."
+    )
     args = parser.parse_args()
-    run(args.port, args.audio_source, args.file, args.dry_run)
+    run(args.port, args.audio_source, args.file, args.dry_run, args.sensitivity)
