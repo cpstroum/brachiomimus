@@ -14,14 +14,17 @@ signal - hi-hats, cymbals, and vocals spike the broadband energy far more
 often than the actual tempo, which reads as chaotic/too-fast on anything
 that isn't a wall of noise. Kick drums and basslines are usually what
 actually carries a song's beat, so filtering down to that band - plus a
-tempo gate that learns the song's pace - gives motion that tracks the real
-beat instead of every little transient.
+peak-relative threshold that favors the strongest low-end hits - gives
+motion that tracks the real beat instead of every little transient.
+
+Tuning: run with --monitor (no arm) to watch detected beats + a live BPM
+readout against any source, and adjust --sensitivity until it locks on.
 
 Usage:
-    python dance.py --port /dev/ttyUSB0 --audio-source mic
     python dance.py --port COM4 --audio-source loopback
+    python dance.py --port /dev/ttyUSB0 --audio-source mic
     python dance.py --port COM4 --audio-source file --file song.wav
-    python dance.py --dry-run --audio-source file --file song.wav
+    python dance.py --monitor --audio-source loopback   # tune, no arm
 
 See MUSIC.md for setup and source selection notes.
 """
@@ -46,7 +49,11 @@ CURL_POSE = WAVE_READY_POSE
 SAMPLE_RATE = 44100
 BLOCK_SIZE = 1024  # ~23ms per block at 44.1kHz
 TICK_HZ = 25.0
-MAX_STEP_DEG = 6.0  # per-tick clamp so no beat pulse can yank the arm
+MAX_STEP_DEG = 6.0  # per-tick slew limit keeps the big joints smooth/safe
+# The gripper is light and should snap open/closed so the pincer reads as a
+# clench even on fast songs, where the global slew limit is too slow to
+# traverse the full range before the next beat flips it.
+GRIPPER_MAX_STEP_DEG = 20.0
 
 # Arm raised, similar in spirit to wave.py's WAVE_READY_POSE
 DANCE_POSE = {
@@ -78,6 +85,9 @@ TWIST_DEG = 30.0
 GRIPPER_JOINT = "gripper"
 GRIPPER_OPEN_DEG = 45.0
 GRIPPER_CLOSED_DEG = 0.0
+
+# Per-joint overrides to the default MAX_STEP_DEG slew limit.
+JOINT_MAX_STEP = {GRIPPER_JOINT: GRIPPER_MAX_STEP_DEG}
 
 
 class EnvelopeFollower:
@@ -188,12 +198,24 @@ def blend(a: dict, b: dict, t: float) -> dict:
     return {k: a[k] + (b[k] - a[k]) * t for k in a}
 
 
-def clamp_step(current: dict, target: dict, max_step: float) -> dict:
+def clamp_step(current: dict, target: dict, max_step: float, overrides: dict | None = None) -> dict:
+    overrides = overrides or {}
     out = {}
     for k, v in target.items():
-        delta = max(-max_step, min(max_step, v - current[k]))
+        limit = overrides.get(k, max_step)
+        delta = max(-limit, min(limit, v - current[k]))
         out[k] = current[k] + delta
     return out
+
+
+def estimate_bpm(beat_times: collections.deque[float]) -> float | None:
+    """Rolling tempo estimate from recent beat timestamps, using the median
+    interval so a stray extra/missed beat doesn't swing the number."""
+    if len(beat_times) < 2:
+        return None
+    intervals = [beat_times[i + 1] - beat_times[i] for i in range(len(beat_times) - 1)]
+    median = sorted(intervals)[len(intervals) // 2]
+    return 60.0 / median if median > 0 else None
 
 
 def run(
@@ -201,8 +223,15 @@ def run(
     audio_source_kind: str,
     file_path: str | None,
     dry_run: bool,
+    monitor: bool,
     sensitivity: float,
 ) -> None:
+    # monitor = beats-only tuning mode: no arm, no per-tick pose spam, just a
+    # live BPM readout so you can dial in --sensitivity against any source
+    # (including loopback while a browser/YouTube plays). dry_run = full pose
+    # pipeline printed each tick but not sent to the arm. Both skip hardware.
+    use_bus = not (dry_run or monitor)
+
     source = create_source(audio_source_kind, SAMPLE_RATE, BLOCK_SIZE, file_path)
     source.start()
 
@@ -210,26 +239,49 @@ def run(
     beat = BeatDetector(block_seconds=BLOCK_SIZE / SAMPLE_RATE, sensitivity=sensitivity)
 
     bus = None
-    if not dry_run:
+    if use_bus:
         calibration = load_calibration(CALIBRATION_PATH)
         bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
         bus.connect()
         bus.sync_write("Torque_Enable", 1)
 
+    if monitor:
+        print(f"Monitor mode (--sensitivity {sensitivity}): listening for beats, "
+              "no arm. Ctrl+C to stop.")
+
     current_pose = dict(REST_POSE)
     loudness = 0.0
     beat_count = 0
+    beat_times: collections.deque[float] = collections.deque(maxlen=8)
+    block_seconds = BLOCK_SIZE / SAMPLE_RATE
+    audio_time = 0.0
     tick_period = 1.0 / TICK_HZ
 
     try:
         while True:
-            tick_start = time.monotonic()
+            loop_start = time.monotonic()
+
+            # Analyze *every* audio block that arrived since the last tick, not
+            # just one. The stream produces ~43 blocks/s but we command the
+            # motors at TICK_HZ (~25/s); draining the queue here keeps beat
+            # detection from missing the block a kick onset lands in. Beat
+            # timing uses an audio clock (block count) rather than wall time, so
+            # it stays accurate regardless of loop scheduling jitter.
             block = source.get_block(timeout=tick_period)
-            if block is not None:
+            while block is not None:
                 loudness = envelope.update(block)
-                if beat.update(bass_energy(block, SAMPLE_RATE), tick_start):
+                audio_time += block_seconds
+                if beat.update(bass_energy(block, SAMPLE_RATE), audio_time):
                     beat_count += 1
-                    print("beat")
+                    beat_times.append(audio_time)
+                    bpm = estimate_bpm(beat_times)
+                    print(f"beat  ({bpm:.0f} BPM)" if bpm else "beat")
+                block = source.get_block(timeout=0.0)
+
+            if monitor:
+                elapsed = time.monotonic() - loop_start
+                time.sleep(max(0.0, tick_period - elapsed))
+                continue
 
             # Held motion states derived from the beat count, so they only
             # change on a beat and then ramp smoothly toward the new target.
@@ -247,14 +299,14 @@ def run(
             open_amount = GRIPPER_OPEN_DEG if gripper_open else GRIPPER_CLOSED_DEG
             target[GRIPPER_JOINT] = open_amount * loudness
 
-            current_pose = clamp_step(current_pose, target, MAX_STEP_DEG)
+            current_pose = clamp_step(current_pose, target, MAX_STEP_DEG, JOINT_MAX_STEP)
 
             if dry_run:
                 print({k: round(v, 1) for k, v in current_pose.items()})
             else:
                 bus.sync_write("Goal_Position", current_pose)
 
-            elapsed = time.monotonic() - tick_start
+            elapsed = time.monotonic() - loop_start
             time.sleep(max(0.0, tick_period - elapsed))
     except KeyboardInterrupt:
         print("Stopping, returning to rest…")
@@ -290,9 +342,15 @@ if __name__ == "__main__":
         help="Print computed poses instead of sending them to the arm"
     )
     parser.add_argument(
+        "--monitor", action="store_true",
+        help="Beats-only tuning mode: no arm, prints each detected beat with a "
+             "live BPM estimate. Works with any --audio-source (e.g. loopback "
+             "while YouTube plays) so you can dial in --sensitivity."
+    )
+    parser.add_argument(
         "--sensitivity", type=float, default=1.8,
         help="Beat detector threshold (default: 1.8). Raise it if the arm "
              "reacts to more than the actual beat; lower it if it misses beats."
     )
     args = parser.parse_args()
-    run(args.port, args.audio_source, args.file, args.dry_run, args.sensitivity)
+    run(args.port, args.audio_source, args.file, args.dry_run, args.monitor, args.sensitivity)

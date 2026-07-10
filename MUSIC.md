@@ -62,34 +62,39 @@ and the mic picks up buzz/whine from the USB connection, switch to
 `loopback` (no mic needed) or `file` (fully offline signal) — that's exactly
 the tradeoff these three modes exist for.
 
-## Dry run (no arm required)
+## Tuning the beat (no arm needed)
+
+If the arm reacts to more than the actual beat (twitchy, too fast), tune the
+detector with **monitor mode** — it listens and prints each detected beat
+with a live BPM estimate, but doesn't touch the arm. It works with any
+source, so you can tune against **whatever you're actually playing**,
+including YouTube in a browser:
 
 ```bash
-python dance.py --dry-run --audio-source file --file song.wav
+# play your song (YouTube, Spotify, anything), then in another window:
+python dance.py --monitor --audio-source loopback
 ```
 
-Runs the full audio → loudness/beat → pose pipeline and prints the computed
-pose every tick (plus a `beat` line each time the beat detector fires)
-instead of sending anything to the arm. Good for checking that the beat
-detector is actually tracking the song's rhythm before connecting to
-hardware — play a song and watch whether the `beat` lines land at the real
-tempo or fire too often.
-
-## Tuning the beat
-
-If the arm reacts to more than the actual beat (twitchy, too fast), raise
-the detector threshold:
+Watch the printed BPM. If it reads roughly the song's real tempo and holds
+steady, you're good. If it's too high / jumpy, raise the threshold until it
+settles:
 
 ```bash
-python dance.py --port COM4 --audio-source loopback --sensitivity 2.5
+python dance.py --monitor --audio-source loopback --sensitivity 2.5
 ```
 
 `--sensitivity` defaults to `1.8`. Higher = only the strongest hits count
 (fewer, cleaner beats); lower = more sensitive (catches quiet beats but also
-more noise). Dial it against a `--dry-run` on the song you're using until the
-`beat` lines match the tempo. The pose amounts themselves (sway/twist/gripper
-degrees, ramp speed) are constants near the top of `dance.py` if you want to
-make the moves bigger or smaller.
+more noise). Once the BPM looks right in monitor mode, run for real with the
+same `--sensitivity` value plus your `--port`.
+
+There's also `--dry-run`, which prints the full computed pose every tick
+(not just beats) without moving the arm — more detail than you usually need,
+but handy if you want to see the exact joint targets.
+
+The pose amounts (sway/twist/gripper degrees, ramp speeds) are constants near
+the top of `dance.py` if you want to make the moves bigger, smaller, or
+snappier.
 
 ## Windows notes
 
