@@ -103,10 +103,9 @@ python dance.py --port COM4 --audio-source loopback --intensity 0.5
 
 ## Making the pincer actually close
 
-The gripper opens/closes between two angles that default to `0` (closed) and
-`45` (open) **in degrees**. But your arm's calibrated `0` isn't necessarily
-its closed position — on some builds `0` is fully *open*, so the pincer never
-appears to close. Find your real values:
+The gripper opens/closes between two angles **in degrees**. Your arm's
+calibrated `0` isn't necessarily its closed position — on some builds `0` is
+fully *open*, so the pincer never appears to close. Find your real values:
 
 ```bash
 python dance.py --port COM4 --read-gripper
@@ -114,17 +113,40 @@ python dance.py --port COM4 --read-gripper
 
 This frees just the gripper (the rest of the arm holds still) and prints its
 live angle. Squeeze it fully closed and note the number, open it fully and
-note that one, then pass both:
+note that one. Then save them once in **`.env`** (see below) so every run
+uses them — or pass them ad-hoc:
 
 ```bash
 python dance.py --port COM4 --audio-source loopback \
-    --gripper-closed 55 --gripper-open 5
+    --gripper-closed -61.32 --gripper-open 61.2
 ```
 
 (The two can be in either order / either sign — whatever your arm reads.)
 
+## Settings & `.env`
+
+Per-arm settings live in `config.py` and are read from a `.env` file (and/or
+real environment variables), so you don't retype your calibration every run.
+The repo ships a `.env` with placeholder gripper values — edit it to match
+your arm:
+
+```ini
+# .env
+BRACHIOMIMUS_GRIPPER_CLOSED_DEG=-61.32
+BRACHIOMIMUS_GRIPPER_OPEN_DEG=61.2
+# BRACHIOMIMUS_PORT=COM4
+# BRACHIOMIMUS_SENSITIVITY=1.8
+# BRACHIOMIMUS_INTENSITY=1.0
+```
+
+Precedence: a CLI flag beats a real environment variable, which beats `.env`,
+which beats the built-in default. These are non-secret hardware settings and
+are fine to commit; if you ever add secrets, put them in `.env.local`
+(gitignored).
+
 The remaining pose amounts (sway/twist degrees, ramp speeds) are constants
-near the top of `dance.py` if you want to change them further.
+near the top of `dance.py`, and the audio DSP lives in `analysis.py`; the
+`--monitor` and `--read-gripper` helpers live in `diagnostics.py`.
 
 ## Windows notes
 
