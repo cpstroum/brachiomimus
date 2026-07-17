@@ -14,6 +14,8 @@ computer, calibrated, and moving on its own. Once that's working:
   on the robot
 - **[GROOT.md](GROOT.md)** — fine-tune NVIDIA's GR00T N1.7 foundation model
   on that dataset instead
+- **[SIM2REAL.md](SIM2REAL.md)** — train a policy in simulation and deploy
+  it zero-shot, no real demonstrations required
 - **[MUSIC.md](MUSIC.md)** — make Brachiomimus dance to music playing on your
   computer
 
