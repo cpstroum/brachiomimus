@@ -12,6 +12,8 @@ computer, calibrated, and moving on its own. Once that's working:
   Rex and record a demonstration dataset with a webcam
 - **[TRAINING.md](TRAINING.md)** — train a policy on that dataset and run it
   on the robot
+- **[GROOT.md](GROOT.md)** — fine-tune NVIDIA's GR00T N1.7 foundation model
+  on that dataset instead
 - **[MUSIC.md](MUSIC.md)** — make Brachiomimus dance to music playing on your
   computer
 
