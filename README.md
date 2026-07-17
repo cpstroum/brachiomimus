@@ -70,6 +70,22 @@ python wave.py --port /dev/ttyACM0 --reps 3
 python wave.py --port COM4 --reps 3
 ```
 
+## Face tracking demo — Brachiomimus watches the room
+
+Points a plain webcam (not eye-in-hand — anywhere in the room works) at the
+space and turns the arm to face whoever it sees, using OpenCV's built-in
+Haar cascade face detector. No ML training or camera calibration involved.
+Requires `pip install opencv-python` (not otherwise a dependency here).
+
+```bash
+python track.py --port /dev/ttyACM0
+python track.py --port COM4 --show      # debug window with the face boxed
+python track.py --dry-run --show        # try it with no arm connected
+```
+
+If the arm pans or tilts the wrong way for your camera's orientation, add
+`--invert-pan` / `--invert-tilt`.
+
 ## Lessons learned: LeRobot compatibility notes (v0.4.x)
 
 These broke silently when upgrading from older LeRobot versions — relevant
