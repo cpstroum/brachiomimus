@@ -26,6 +26,22 @@ layout), GR00T's repo ships a conversion helper
 `meta/info.json` for a version field if fine-tuning complains about the
 schema.
 
+## Compute
+
+Fine-tuning needs **40GB+ VRAM on a single GPU minimum** (A100/H100/L40-class)
+even for the default lightweight fine-tune (projector + action head only,
+~35GB peak). Full fine-tuning with `--tune-llm`/`--tune-visual` pushes to
+80GB+ per GPU. This is well beyond what `act` in TRAINING.md needs — that one
+can train locally or on a small GPU; GR00T can't.
+
+Concretely, on Azure this rules out `NCasT4_v3` (T4, 16GB/GPU) — a single T4
+can't hold the 3B model plus activations, and stacking multiple T4s doesn't
+fix it since the default fine-tune isn't set up to shard across small GPUs
+like that. You'd want `NC A100 v4`, `ND A100 v4`, or `NC H100 v5` series
+instead (40–80GB/GPU). If your existing HF GPU tier already gets you to
+40GB+, that's the lower-friction option since the workflow there is already
+proven.
+
 ## 1. Set up Isaac-GR00T
 
 ```bash
