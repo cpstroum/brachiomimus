@@ -58,6 +58,30 @@ Checkpoints land wherever the script's run directory defaults to; confirm
 with `--help` since Squint is a newer/smaller project and paths may not be
 as stable as LeRobot's.
 
+## Wrist camera hardware
+
+Brachiomimus's kit already includes a printed mount for a 32×32mm bare UVC
+board camera (`SO101_Wrist_Cam_Hex-Nut_Mount_32x32_UVC_Module` from the
+[SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) optional parts —
+found unlabeled among the other printed parts, not called out in the
+getting-started instructions). That mount wants a bare board camera, not a
+housed desktop webcam like the NexiGo N980P used for the side-angle camera
+in TELEOPERATION.md — the N980P's case won't fit the snap-clamp.
+
+A good match: an **8MP Sony IMX179 USB board camera, 38mm×38mm** (e.g.
+Vetco's VUPN2213), driver-free UVC, autofocus. It's marketed for Pi/Jetson
+embedded builds, which is exactly this use case. It's a few mm larger than
+the mount's nominal 32×32mm spec, so check the snap-clamp opening/screw hole
+tolerance against the board before assuming a perfect fit — but this class
+of small square board camera is the right form factor, unlike a housed
+webcam.
+
+If a board camera isn't available, fall back to a housed webcam zip-tied or
+Velcro'd directly to the wrist link (skip the printed mount) — Squint only
+needs an RGB frame from roughly the right viewpoint, not a specific camera
+model, so a janky-but-secure mount still works as long as step 3's
+calibration accounts for its actual pose.
+
 ## 3. Calibrate the real setup (camera + background)
 
 Before deploying, the sim policy needs the real world to visually resemble
