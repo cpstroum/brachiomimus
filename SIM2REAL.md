@@ -68,19 +68,15 @@ getting-started instructions). That mount wants a bare board camera, not a
 housed desktop webcam like the NexiGo N980P used for the side-angle camera
 in TELEOPERATION.md — the N980P's case won't fit the snap-clamp.
 
-A good match: an **8MP Sony IMX179 USB board camera, 38mm×38mm** (e.g.
-Vetco's VUPN2213), driver-free UVC, autofocus. It's marketed for Pi/Jetson
-embedded builds, which is exactly this use case. It's a few mm larger than
-the mount's nominal 32×32mm spec, so check the snap-clamp opening/screw hole
-tolerance against the board before assuming a perfect fit — but this class
-of small square board camera is the right form factor, unlike a housed
-webcam.
-
-If a board camera isn't available, fall back to a housed webcam zip-tied or
-Velcro'd directly to the wrist link (skip the printed mount) — Squint only
-needs an RGB frame from roughly the right viewpoint, not a specific camera
-model, so a janky-but-secure mount still works as long as step 3's
-calibration accounts for its actual pose.
+The obvious board-camera candidate (an 8MP Sony IMX179 USB board, 38mm×38mm,
+e.g. Vetco's VUPN2213) wasn't in stock locally, so **Brachiomimus's wrist
+camera is the NexiGo N980P**, zip-tied/Velcro'd to the wrist link rather
+than clamped into the board-camera mount — the mount doesn't fit its case.
+Squint only needs an RGB frame from roughly the right viewpoint, not a
+specific camera model, so this works as long as step 3's calibration
+accounts for the N980P's actual mounted pose. Revisit a board camera later
+if the housed webcam's weight/bulk turns out to be a problem for the wrist
+joint's range of motion.
 
 ## 3. Calibrate the real setup (camera + background)
 
