@@ -16,6 +16,8 @@ computer, calibrated, and moving on its own. Once that's working:
   on that dataset instead
 - **[SIM2REAL.md](SIM2REAL.md)** — train a policy in simulation and deploy
   it zero-shot, no real demonstrations required
+- **[COMPARISON.md](COMPARISON.md)** — track sim2real vs. real-episode
+  training side by side
 - **[MUSIC.md](MUSIC.md)** — make Brachiomimus dance to music playing on your
   computer
 
