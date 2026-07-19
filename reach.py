@@ -63,16 +63,17 @@ import config
 from wave import CALIBRATION_PATH, MOTORS, load_calibration
 from lerobot.motors.feetech import FeetechMotorsBus
 
-# Arm pose that points the wrist camera down/forward at the workspace in
-# front of the base, gripper open. THIS IS A GUESS - jog the arm by hand to
-# a good hover position over your workspace and replace these numbers.
+# Arm pose that points the wrist camera down at the target with the gripper
+# open and clear, captured with --read-pose (marker centered on the crosshair)
+# on the arm this repo is tuned for. Re-capture with --read-pose if your
+# workspace or mounting differs.
 REACH_READY_POSE = {
-    "shoulder_pan": 0.0,
-    "shoulder_lift": -45.0,
-    "elbow_flex": 60.0,
-    "wrist_flex": -30.0,
-    "wrist_roll": 0.0,
-    "gripper": 0.0,  # overwritten each tick with the real open/closed angle
+    "shoulder_pan": 32.0,
+    "shoulder_lift": -56.4,
+    "elbow_flex": 45.3,
+    "wrist_flex": 33.6,
+    "wrist_roll": -55.5,
+    "gripper": -14.3,  # overwritten each tick with the real open/closed angle
 }
 
 PAN_JOINT = "shoulder_pan"
@@ -194,6 +195,8 @@ def run(
     repeat: bool,
     white: bool = False,
     sat_max: int = 60,
+    track_only: bool = False,
+    max_step: float = MAX_STEP_DEG,
 ) -> None:
     # Build the HSV mask bounds once. The default path brackets a saturated
     # hue (a colored marker or blob); --white instead looks for bright,
@@ -236,9 +239,11 @@ def run(
             blob, mask = find_blob(frame, lower, upper)
             now = time.monotonic()
 
+            area_fraction = 0.0
             if blob is not None:
                 last_seen = now
                 x, y, w, h, area = blob
+                area_fraction = area / (fw * fh)
                 if show:
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 if state == "search":
@@ -266,18 +271,21 @@ def run(
                     dx = -dx
                 if invert_tilt:
                     dy = -dy
-                area_fraction = area / (fw * fh)
 
                 target[PAN_JOINT] = current_pose[PAN_JOINT] - dx * MAX_STEP_DEG * 2
                 target[TILT_JOINT] = current_pose[TILT_JOINT] - dy * MAX_STEP_DEG * 2
                 target[GRIPPER_JOINT] = gripper_open_deg
 
+                # --track-only stops here: the arm re-centers the marker with
+                # pan/tilt but never advances or grasps, so you can safely
+                # confirm the centering directions before it reaches in.
                 centered = abs(dx) < CENTER_TOLERANCE and abs(dy) < CENTER_TOLERANCE
-                if area_fraction >= min_area_fraction and centered:
-                    state = "grasp"
-                    grasp_start = now
-                elif centered:
-                    target[ADVANCE_JOINT] = current_pose[ADVANCE_JOINT] + ADVANCE_STEP_DEG
+                if not track_only:
+                    if area_fraction >= min_area_fraction and centered:
+                        state = "grasp"
+                        grasp_start = now
+                    elif centered:
+                        target[ADVANCE_JOINT] = current_pose[ADVANCE_JOINT] + ADVANCE_STEP_DEG
 
             elif state == "grasp":
                 target[GRIPPER_JOINT] = gripper_closed
@@ -295,7 +303,7 @@ def run(
                         print("Lifted. Done.")
                         break
 
-            current_pose = clamp_step(current_pose, target, MAX_STEP_DEG)
+            current_pose = clamp_step(current_pose, target, max_step)
 
             if dry_run:
                 print(state, {k: round(v, 1) for k, v in current_pose.items()})
@@ -303,7 +311,8 @@ def run(
                 bus.sync_write("Goal_Position", current_pose)
 
             if show:
-                cv2.putText(frame, state, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                label = f"{state}{' (track-only)' if track_only else ''}  area={area_fraction * 100:4.1f}%  grasp>={min_area_fraction * 100:.0f}%"
+                cv2.putText(frame, label, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 cv2.imshow("reach.py", frame)
                 cv2.imshow("reach.py mask", mask)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -346,6 +355,8 @@ if __name__ == "__main__":
     parser.add_argument("--white", action="store_true", help="Detect a bright, near-colorless target (e.g. white string) instead of a hue: ignores --hue-*, matches saturation up to --sat-max and value at/above --val-min. Needs a dark backdrop and can be fooled by a shiny gripper - a saturated colored marker is usually more reliable.")
     parser.add_argument("--sat-max", type=int, default=60, help="In --white mode, the maximum saturation that still counts as 'white/pale' (default: 60)")
     parser.add_argument("--read-pose", action="store_true", help="Release torque and print live joint angles so you can hand-jog the arm to a good hover pose and capture it for REACH_READY_POSE, then exit. Pass --camera too to see a live wrist-camera preview with a center crosshair while you pose. Needs --port.")
+    parser.add_argument("--track-only", action="store_true", help="Center the marker with pan/tilt but never advance or grasp. Use for the first live run to confirm the centering directions (add --invert-pan/--invert-tilt if it corrects the wrong way) before letting the arm reach in.")
+    parser.add_argument("--max-step", type=float, default=MAX_STEP_DEG, help=f"Per-tick slew limit in degrees (default: {MAX_STEP_DEG}). Lower it (e.g. 2) for a slower, more cautious first live run.")
     args = parser.parse_args()
     if args.read_pose:
         read_pose(args.port, args.camera)
@@ -355,5 +366,5 @@ if __name__ == "__main__":
             args.hue_min, args.hue_max, args.sat_min, args.val_min,
             args.min_area, args.invert_pan, args.invert_tilt,
             args.gripper_closed, args.gripper_open, args.repeat,
-            args.white, args.sat_max,
+            args.white, args.sat_max, args.track_only, args.max_step,
         )
