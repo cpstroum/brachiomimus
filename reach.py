@@ -102,6 +102,39 @@ def clamp_step(current: dict, target: dict, max_step: float) -> dict:
     return out
 
 
+def read_pose(port: str) -> None:
+    """Release ALL joints and print their live angles, so you can hand-jog the
+    arm to a good hover pose over the target (wrist camera aimed at it, gripper
+    open and clear) and read off the six numbers for REACH_READY_POSE. Ctrl+C
+    prints a ready-to-paste snapshot.
+
+    SAFETY: this turns torque OFF, so the arm goes limp and will sag under
+    gravity. Support it by hand before you start, and lower it gently after.
+    """
+    calibration = load_calibration(CALIBRATION_PATH)
+    bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
+    bus.connect()
+    pos = {}
+    try:
+        bus.sync_write("Torque_Enable", 0)
+        print("Torque OFF - hold the arm, it's limp now. Move it to a good hover")
+        print("pose over the target, then Ctrl+C to capture it. Live angles:")
+        while True:
+            pos = bus.sync_read("Present_Position")
+            print("  " + "  ".join(f"{k}={pos[k]:6.1f}" for k in MOTORS), end="\r", flush=True)
+            time.sleep(0.15)
+    except KeyboardInterrupt:
+        if pos:
+            print("\n\nPaste this into REACH_READY_POSE in reach.py:")
+            print("REACH_READY_POSE = {")
+            for k in MOTORS:
+                print(f'    "{k}": {pos[k]:.1f},')
+            print("}")
+    finally:
+        bus.disconnect()
+        print("\nDone.")
+
+
 def find_blob(frame, lower, upper):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, lower, upper)
@@ -285,11 +318,15 @@ if __name__ == "__main__":
     parser.add_argument("--repeat", action="store_true", help="After lifting, go back to SEARCH instead of exiting")
     parser.add_argument("--white", action="store_true", help="Detect a bright, near-colorless target (e.g. white string) instead of a hue: ignores --hue-*, matches saturation up to --sat-max and value at/above --val-min. Needs a dark backdrop and can be fooled by a shiny gripper - a saturated colored marker is usually more reliable.")
     parser.add_argument("--sat-max", type=int, default=60, help="In --white mode, the maximum saturation that still counts as 'white/pale' (default: 60)")
+    parser.add_argument("--read-pose", action="store_true", help="Release torque and print live joint angles so you can hand-jog the arm to a good hover pose and capture it for REACH_READY_POSE, then exit. Needs --port.")
     args = parser.parse_args()
-    run(
-        args.port, args.camera, args.dry_run, args.show,
-        args.hue_min, args.hue_max, args.sat_min, args.val_min,
-        args.min_area, args.invert_pan, args.invert_tilt,
-        args.gripper_closed, args.gripper_open, args.repeat,
-        args.white, args.sat_max,
-    )
+    if args.read_pose:
+        read_pose(args.port)
+    else:
+        run(
+            args.port, args.camera, args.dry_run, args.show,
+            args.hue_min, args.hue_max, args.sat_min, args.val_min,
+            args.min_area, args.invert_pan, args.invert_tilt,
+            args.gripper_closed, args.gripper_open, args.repeat,
+            args.white, args.sat_max,
+        )
