@@ -1,0 +1,18 @@
+# Extra Python dependencies for the vision demos (reach.py, track.py).
+#
+# LeRobot itself is NOT listed here — install it per its own instructions
+# (it pulls in torch and a lot more); these are just the additional packages
+# the camera demos need on top of a working LeRobot environment.
+#
+#   pip install -r requirements.txt
+
+numpy
+
+# reach.py (wrist-cam lavender grasp) works on any modern OpenCV, 4.x or 5.x.
+#
+# NOTE: track.py (room-facing face tracker) uses the classic Haar cascade
+# API (cv2.CascadeClassifier + cv2.data.haarcascades), which OpenCV 5 REMOVED
+# along with the bundled cascade XML files. If you want to run track.py,
+# pin OpenCV to 4.x instead of the line below:
+#   opencv-python>=4.8,<5
+opencv-python

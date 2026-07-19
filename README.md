@@ -75,7 +75,11 @@ python wave.py --port COM4 --reps 3
 Points a plain webcam (not eye-in-hand — anywhere in the room works) at the
 space and turns the arm to face whoever it sees, using OpenCV's built-in
 Haar cascade face detector. No ML training or camera calibration involved.
-Requires `pip install opencv-python` (not otherwise a dependency here).
+
+> **OpenCV 5 caveat:** this uses the classic `cv2.CascadeClassifier` Haar
+> API, which OpenCV 5 removed (along with the bundled cascade files). Run
+> it on OpenCV **4.x** — `pip install "opencv-python>=4.8,<5"`. `reach.py`
+> below has no such constraint.
 
 ```bash
 python track.py --port /dev/ttyACM0
@@ -95,6 +99,9 @@ estimation: it centers the blob with `shoulder_pan`/`wrist_flex` and
 extends `elbow_flex` a bit each tick, using the blob getting bigger as the
 "getting closer" signal, then closes the gripper once it fills enough of
 the frame.
+
+Install the vision dependencies first (on top of your working LeRobot
+environment): `pip install -r requirements.txt`.
 
 ```bash
 python reach.py --port /dev/ttyACM0 --camera 1 --show
