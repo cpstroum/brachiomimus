@@ -23,6 +23,15 @@ lerobot-find-cameras opencv
 This lists each detected camera with its index/path (`0`, `1`, `/dev/video0`,
 ...). Use that value as `index_or_path` in the `--robot.cameras` flag below.
 
+**Multiple cameras** (e.g. the overhead/side view plus a wrist-mounted one)
+just add another key to the same dict:
+```
+--robot.cameras="{front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}, wrist: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}"
+```
+Recording with both means a trained policy sees the gripper closing on an
+object up close (from `wrist`) as well as the overall scene (from `front`),
+which tends to matter a lot for grasp success.
+
 **Windows gotchas:**
 - `[ERROR:0@...] obsensor_uvc_stream_channel.cpp ... Camera index out of range` —
   harmless. OpenCV is just probing for Orbbec/RealSense-style sensors across a

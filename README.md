@@ -86,6 +86,28 @@ python track.py --dry-run --show        # try it with no arm connected
 If the arm pans or tilts the wrong way for your camera's orientation, add
 `--invert-pan` / `--invert-tilt`.
 
+## Reach demo — grasp a colored object with the wrist camera
+
+Uses a **wrist-mounted** camera (not the room-facing one from the tracking
+demo above) to visually servo onto a colored blob — defaults to a
+lavender-ish purple — and grasp it. No inverse kinematics or depth
+estimation: it centers the blob with `shoulder_pan`/`wrist_flex` and
+extends `elbow_flex` a bit each tick, using the blob getting bigger as the
+"getting closer" signal, then closes the gripper once it fills enough of
+the frame.
+
+```bash
+python reach.py --port /dev/ttyACM0 --camera 1 --show
+python reach.py --dry-run --show      # tune detection with no arm connected
+```
+
+**This needs on-arm tuning before it'll do anything useful** — see the
+docstring in `reach.py` for what to jog in by hand (the hover pose) and
+what to dial in with `--show` (the HSV color range, and
+`--invert-pan`/`--invert-tilt` if centering moves the wrong way). There's
+no force sensing, so it doesn't verify the grasp actually took — watch the
+lift and judge for yourself, and don't leave it unattended.
+
 ## Lessons learned: LeRobot compatibility notes (v0.4.x)
 
 These broke silently when upgrading from older LeRobot versions — relevant
