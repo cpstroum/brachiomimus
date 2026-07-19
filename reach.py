@@ -79,11 +79,17 @@ REACH_READY_POSE = {
 # Pose the arm ramps to on shutdown before torque is released. It should be
 # LOW and self-supporting - arm folded down and/or resting on the table - so
 # that when torque cuts off the arm has nowhere to fall and doesn't flop. A
-# raised pose (like REACH_READY_POSE) drops as soon as it goes limp. Capture
-# yours with --read-pose: let the arm settle into a stable resting position by
-# hand, then read off the angles. Defaults to REACH_READY_POSE (which will
-# still flop) until you set a real one.
-PARK_POSE = dict(REACH_READY_POSE)
+# raised pose (like REACH_READY_POSE) drops as soon as it goes limp. Captured
+# with --read-pose by letting the arm settle into a stable resting position by
+# hand. Re-capture if your mounting or surface differs.
+PARK_POSE = {
+    "shoulder_pan": 30.5,
+    "shoulder_lift": -108.9,
+    "elbow_flex": 99.4,
+    "wrist_flex": 35.3,
+    "wrist_roll": -55.4,
+    "gripper": -38.0,
+}
 
 PAN_JOINT = "shoulder_pan"
 TILT_JOINT = "wrist_flex"
