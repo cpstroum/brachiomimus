@@ -102,11 +102,15 @@ def clamp_step(current: dict, target: dict, max_step: float) -> dict:
     return out
 
 
-def read_pose(port: str) -> None:
+def read_pose(port: str, camera: int | None = None) -> None:
     """Release ALL joints and print their live angles, so you can hand-jog the
     arm to a good hover pose over the target (wrist camera aimed at it, gripper
-    open and clear) and read off the six numbers for REACH_READY_POSE. Ctrl+C
-    prints a ready-to-paste snapshot.
+    open and clear) and read off the six numbers for REACH_READY_POSE.
+
+    If a camera index is given, a live preview of the wrist camera opens with a
+    crosshair at frame center - jog the arm until the marker sits on the
+    crosshair, then press q in the window (or Ctrl+C) to capture. Without a
+    camera it just prints angles; capture with Ctrl+C.
 
     SAFETY: this turns torque OFF, so the arm goes limp and will sag under
     gravity. Support it by hand before you start, and lower it gently after.
@@ -114,23 +118,46 @@ def read_pose(port: str) -> None:
     calibration = load_calibration(CALIBRATION_PATH)
     bus = FeetechMotorsBus(port=port, motors=MOTORS, calibration=calibration)
     bus.connect()
+    cap = None
+    if camera is not None:
+        cap = cv2.VideoCapture(camera)
+        if not cap.isOpened():
+            print(f"Warning: could not open camera {camera}; continuing with no preview.")
+            cap = None
     pos = {}
     try:
         bus.sync_write("Torque_Enable", 0)
         print("Torque OFF - hold the arm, it's limp now. Move it to a good hover")
-        print("pose over the target, then Ctrl+C to capture it. Live angles:")
+        if cap is not None:
+            print("pose with the marker centered on the crosshair, then press q in the")
+            print("preview window (or Ctrl+C) to capture. Live angles:")
+        else:
+            print("pose over the target, then Ctrl+C to capture it. Live angles:")
         while True:
             pos = bus.sync_read("Present_Position")
             print("  " + "  ".join(f"{k}={pos[k]:6.1f}" for k in MOTORS), end="\r", flush=True)
-            time.sleep(0.15)
+            if cap is not None:
+                ok, frame = cap.read()
+                if ok:
+                    h, w = frame.shape[:2]
+                    cv2.drawMarker(frame, (w // 2, h // 2), (0, 255, 0), cv2.MARKER_CROSS, 30, 2)
+                    cv2.imshow("read_pose (q to capture)", frame)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+            else:
+                time.sleep(0.15)
     except KeyboardInterrupt:
+        pass
+    finally:
         if pos:
             print("\n\nPaste this into REACH_READY_POSE in reach.py:")
             print("REACH_READY_POSE = {")
             for k in MOTORS:
                 print(f'    "{k}": {pos[k]:.1f},')
             print("}")
-    finally:
+        if cap is not None:
+            cap.release()
+            cv2.destroyAllWindows()
         bus.disconnect()
         print("\nDone.")
 
@@ -318,10 +345,10 @@ if __name__ == "__main__":
     parser.add_argument("--repeat", action="store_true", help="After lifting, go back to SEARCH instead of exiting")
     parser.add_argument("--white", action="store_true", help="Detect a bright, near-colorless target (e.g. white string) instead of a hue: ignores --hue-*, matches saturation up to --sat-max and value at/above --val-min. Needs a dark backdrop and can be fooled by a shiny gripper - a saturated colored marker is usually more reliable.")
     parser.add_argument("--sat-max", type=int, default=60, help="In --white mode, the maximum saturation that still counts as 'white/pale' (default: 60)")
-    parser.add_argument("--read-pose", action="store_true", help="Release torque and print live joint angles so you can hand-jog the arm to a good hover pose and capture it for REACH_READY_POSE, then exit. Needs --port.")
+    parser.add_argument("--read-pose", action="store_true", help="Release torque and print live joint angles so you can hand-jog the arm to a good hover pose and capture it for REACH_READY_POSE, then exit. Pass --camera too to see a live wrist-camera preview with a center crosshair while you pose. Needs --port.")
     args = parser.parse_args()
     if args.read_pose:
-        read_pose(args.port)
+        read_pose(args.port, args.camera)
     else:
         run(
             args.port, args.camera, args.dry_run, args.show,
