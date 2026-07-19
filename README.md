@@ -115,6 +115,18 @@ what to dial in with `--show` (the HSV color range, and
 no force sensing, so it doesn't verify the grasp actually took — watch the
 lift and judge for yourself, and don't leave it unattended.
 
+**Pick a good target.** Detection is color-based, so it wants a distinct,
+*saturated* color. Muted natural objects (dried lavender) under a color
+cast detect poorly. The reliable trick: tie a scrap of brightly colored
+yarn at the spot you want grabbed, in a hue that's absent from the rest of
+the scene, and detect that — high saturation also keeps the gripper and any
+pale background out of the mask. Use `probe_color.py` to read the marker's
+real HSV (click it in the feed), then set `--hue-min/--hue-max/--sat-min/
+--val-min` to bracket it. For a thin marker, lower `--min-area` so the grasp
+still triggers. (There's also a `--white` mode for a white-string target,
+but it needs a dark backdrop and can latch onto a shiny gripper — a colored
+marker is safer.)
+
 ## Lessons learned: LeRobot compatibility notes (v0.4.x)
 
 These broke silently when upgrading from older LeRobot versions — relevant

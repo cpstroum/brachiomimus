@@ -28,10 +28,20 @@ IMPORTANT — this needs on-arm tuning before it'll do anything sensible:
     up/down) depends on how the wrist camera is physically mounted and can
     come out inverted or swapped; use --invert-pan/--invert-tilt, same idea
     as track.py.
-  - The default HSV range is a rough guess at lavender under generic
-    lighting. Run with --show — it opens both the camera view and the
-    color mask — and adjust --hue-min/--hue-max/--sat-min/--val-min until
-    only the flowers show up white in the mask.
+  - Detection is color-based, so it needs a target that's a distinct,
+    SATURATED color against the background. A muted natural object (dried
+    lavender) under a color cast is a poor target - the reliable trick is to
+    tie a brightly colored marker (a scrap of saturated yarn) at the exact
+    spot you want grabbed, in a hue absent from the scene, and detect that.
+    High saturation also keeps the low-saturation gripper and any pale
+    background out of the mask. Find the marker's real HSV by clicking it in
+    probe_color.py, then set --hue-min/--hue-max/--sat-min/--val-min to
+    bracket it. Run reach.py with --show to see the mask and confirm only the
+    marker lights up. (--white instead targets a bright, near-colorless
+    object like white string, but only against a dark backdrop and at the
+    risk of latching onto a shiny gripper - a colored marker is safer.)
+  - For a thin marker, lower --min-area so the grasp still triggers before
+    the target fills 18% of the frame.
   - There's no force sensing, so "grasp success" isn't verified - watch the
     lift and judge for yourself. Don't leave it unattended.
 
@@ -92,9 +102,9 @@ def clamp_step(current: dict, target: dict, max_step: float) -> dict:
     return out
 
 
-def find_blob(frame, hue_min, hue_max, sat_min, val_min):
+def find_blob(frame, lower, upper):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, (hue_min, sat_min, val_min), (hue_max, 255, 255))
+    mask = cv2.inRange(hsv, lower, upper)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
@@ -122,7 +132,22 @@ def run(
     gripper_closed: float,
     gripper_open_deg: float,
     repeat: bool,
+    white: bool = False,
+    sat_max: int = 60,
 ) -> None:
+    # Build the HSV mask bounds once. The default path brackets a saturated
+    # hue (a colored marker or blob); --white instead looks for bright,
+    # near-colorless pixels (a white string) - low saturation, high value,
+    # any hue. White mode only separates cleanly against a dark backdrop and
+    # can be fooled by a light/shiny gripper, so a saturated colored marker
+    # is usually the more reliable target.
+    if white:
+        lower = (0, 0, val_min)
+        upper = (179, sat_max, 255)
+    else:
+        lower = (hue_min, sat_min, val_min)
+        upper = (hue_max, 255, 255)
+
     cap = cv2.VideoCapture(camera)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera {camera}")
@@ -148,7 +173,7 @@ def run(
                 break
 
             fh, fw = frame.shape[:2]
-            blob, mask = find_blob(frame, hue_min, hue_max, sat_min, val_min)
+            blob, mask = find_blob(frame, lower, upper)
             now = time.monotonic()
 
             if blob is not None:
@@ -258,10 +283,13 @@ if __name__ == "__main__":
     parser.add_argument("--gripper-closed", type=float, default=config.GRIPPER_CLOSED_DEG, help="Gripper angle that is FULLY CLOSED on your arm - see --read-gripper in dance.py")
     parser.add_argument("--gripper-open", type=float, default=config.GRIPPER_OPEN_DEG, help="Gripper angle that is fully open")
     parser.add_argument("--repeat", action="store_true", help="After lifting, go back to SEARCH instead of exiting")
+    parser.add_argument("--white", action="store_true", help="Detect a bright, near-colorless target (e.g. white string) instead of a hue: ignores --hue-*, matches saturation up to --sat-max and value at/above --val-min. Needs a dark backdrop and can be fooled by a shiny gripper - a saturated colored marker is usually more reliable.")
+    parser.add_argument("--sat-max", type=int, default=60, help="In --white mode, the maximum saturation that still counts as 'white/pale' (default: 60)")
     args = parser.parse_args()
     run(
         args.port, args.camera, args.dry_run, args.show,
         args.hue_min, args.hue_max, args.sat_min, args.val_min,
         args.min_area, args.invert_pan, args.invert_tilt,
         args.gripper_closed, args.gripper_open, args.repeat,
+        args.white, args.sat_max,
     )
