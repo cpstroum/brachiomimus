@@ -76,6 +76,15 @@ REACH_READY_POSE = {
     "gripper": -14.3,  # overwritten each tick with the real open/closed angle
 }
 
+# Pose the arm ramps to on shutdown before torque is released. It should be
+# LOW and self-supporting - arm folded down and/or resting on the table - so
+# that when torque cuts off the arm has nowhere to fall and doesn't flop. A
+# raised pose (like REACH_READY_POSE) drops as soon as it goes limp. Capture
+# yours with --read-pose: let the arm settle into a stable resting position by
+# hand, then read off the angles. Defaults to REACH_READY_POSE (which will
+# still flop) until you set a real one.
+PARK_POSE = dict(REACH_READY_POSE)
+
 PAN_JOINT = "shoulder_pan"
 TILT_JOINT = "wrist_flex"
 ADVANCE_JOINT = "elbow_flex"
@@ -326,9 +335,12 @@ def run(
         if show:
             cv2.destroyAllWindows()
         if bus is not None:
+            # Ramp down to the low, self-supporting park pose before releasing
+            # torque, so the arm settles instead of flopping when it goes limp.
+            park_target = {**PARK_POSE, GRIPPER_JOINT: gripper_open_deg}
             pose = current_pose
-            for _ in range(25):
-                pose = clamp_step(pose, {**REACH_READY_POSE, GRIPPER_JOINT: gripper_closed}, MAX_STEP_DEG)
+            for _ in range(40):
+                pose = clamp_step(pose, park_target, MAX_STEP_DEG)
                 bus.sync_write("Goal_Position", pose)
                 time.sleep(0.05)
             bus.sync_write("Torque_Enable", 0)
