@@ -2,10 +2,10 @@
 
 Drive Brachiomimus (follower) with Brachius Rex (leader). Recording a
 demonstration dataset with a webcam is optional — do it if you're heading
-toward training a policy in [TRAINING.md](TRAINING.md); skip it if you just
+toward training a policy in [training-act.md](training-act.md); skip it if you just
 want to puppeteer the arm.
 
-Assumes both arms are already calibrated — see the [Calibration](README.md#calibration)
+Assumes both arms are already calibrated — see the [Calibration](../README.md#calibration)
 section in the getting-started doc.
 
 Everything below uses LeRobot's built-in CLI (`lerobot-*` commands) rather
@@ -115,4 +115,4 @@ This drives Brachiomimus through the recorded actions with no leader
 attached — a good way to confirm the dataset actually captured what you
 intended before spending time training on it.
 
-Dataset ready? Move on to [TRAINING.md](TRAINING.md).
+Dataset ready? Move on to [training-act.md](training-act.md).

@@ -12,7 +12,7 @@ and pick ranges that bracket them.
 Standalone: no arm, no LeRobot, just OpenCV + numpy.
 
 Usage:
-    python probe_color.py --camera 3
+    python -m tools.probe_color --camera 3
 
 Click anywhere in the window to print the average HSV over a small patch at
 that spot (and the min/max across the patch, so you can see the spread).

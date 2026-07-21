@@ -46,8 +46,8 @@ IMPORTANT — this needs on-arm tuning before it'll do anything sensible:
     lift and judge for yourself. Don't leave it unattended.
 
 Usage:
-    python reach.py --port /dev/ttyACM0 --camera 1 --show
-    python reach.py --dry-run --show          # tune detection, no arm
+    python -m demos.reach --port /dev/ttyACM0 --camera 1 --show
+    python -m demos.reach --dry-run --show          # tune detection, no arm
 
 Requires opencv-python and numpy, same extra dependency as track.py.
 """
@@ -57,11 +57,13 @@ import math
 import time
 
 import cv2
-import numpy as np
 
-import config
-from wave import CALIBRATION_PATH, MOTORS, load_calibration
 from lerobot.motors.feetech import FeetechMotorsBus
+
+from brachiomimus import config
+from brachiomimus.hardware import CALIBRATION_PATH, MOTORS, load_calibration
+from brachiomimus.motion import clamp_step
+from brachiomimus.vision import find_blob
 
 # Arm pose that points the wrist camera down at the target with the gripper
 # open and clear, captured with --read-pose (marker centered on the crosshair)
@@ -101,21 +103,12 @@ ADVANCE_STEP_DEG = 2.5   # how far elbow_flex extends per tick while approaching
 CENTER_TOLERANCE = 0.15  # blob center must be within this fraction of frame center...
 CLOSE_AREA_FRACTION = 0.18  # ...and blob must cover this fraction of the frame...
                              # ...before GRASP triggers
-NOISE_FLOOR_PX = 200     # ignore blobs smaller than this (fixed, unlike --min-area)
 
 LOST_TIMEOUT_S = 1.5
 SEARCH_PERIOD_S = 8.0
 SEARCH_SWEEP_LIMIT_DEG = 40.0
 
 GRASP_HOLD_S = 0.6
-
-
-def clamp_step(current: dict, target: dict, max_step: float) -> dict:
-    out = {}
-    for k, v in target.items():
-        delta = max(-max_step, min(max_step, v - current[k]))
-        out[k] = current[k] + delta
-    return out
 
 
 def read_pose(port: str, camera: int | None = None) -> None:
@@ -176,21 +169,6 @@ def read_pose(port: str, camera: int | None = None) -> None:
             cv2.destroyAllWindows()
         bus.disconnect()
         print("\nDone.")
-
-
-def find_blob(frame, lower, upper):
-    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, lower, upper)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None, mask
-    largest = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(largest)
-    if area < NOISE_FLOOR_PX:
-        return None, mask
-    x, y, w, h = cv2.boundingRect(largest)
-    return (x, y, w, h, area), mask
 
 
 def run(

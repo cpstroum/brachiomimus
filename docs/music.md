@@ -1,7 +1,7 @@
 # Dancing to music
 
 Make Brachiomimus move along with whatever's playing on your computer, via
-`dance.py`. Two things drive the motion, computed live from the audio:
+`demos/dance.py`. Two things drive the motion, computed live from the audio:
 
 - **Loudness** — a smoothed volume envelope sets how big all the motion is
   right now (quiet → gentle, loud → big raises, wide swings, full pincer).
@@ -21,7 +21,7 @@ Make Brachiomimus move along with whatever's playing on your computer, via
   weaker off-beat bass notes.
 
 Assumes the follower is already calibrated — see the
-[Calibration](README.md#calibration) section in the getting-started doc.
+[Calibration](../README.md#calibration) section in the getting-started doc.
 
 ## Setup
 
@@ -47,14 +47,14 @@ cleanest signal for your setup:
 
 ```bash
 # Linux
-python dance.py --port /dev/ttyACM0 --audio-source mic
-python dance.py --port /dev/ttyACM0 --audio-source loopback
-python dance.py --port /dev/ttyACM0 --audio-source file --file song.wav
+python -m demos.dance --port /dev/ttyACM0 --audio-source mic
+python -m demos.dance --port /dev/ttyACM0 --audio-source loopback
+python -m demos.dance --port /dev/ttyACM0 --audio-source file --file song.wav
 
 # Windows
-python dance.py --port COM4 --audio-source mic
-python dance.py --port COM4 --audio-source loopback
-python dance.py --port COM4 --audio-source file --file song.wav
+python -m demos.dance --port COM4 --audio-source mic
+python -m demos.dance --port COM4 --audio-source loopback
+python -m demos.dance --port COM4 --audio-source file --file song.wav
 ```
 
 If you're running everything from the same laptop that powers Brachiomimus
@@ -72,7 +72,7 @@ including YouTube in a browser:
 
 ```bash
 # play your song (YouTube, Spotify, anything), then in another window:
-python dance.py --monitor --audio-source loopback
+python -m demos.dance --monitor --audio-source loopback
 ```
 
 Watch the printed BPM. If it reads roughly the song's real tempo and holds
@@ -80,7 +80,7 @@ steady, you're good. If it's too high / jumpy, raise the threshold until it
 settles:
 
 ```bash
-python dance.py --monitor --audio-source loopback --sensitivity 2.5
+python -m demos.dance --monitor --audio-source loopback --sensitivity 2.5
 ```
 
 `--sensitivity` defaults to `1.8`. Higher = only the strongest hits count
@@ -98,7 +98,7 @@ If it feels too wild, turn down `--intensity` (default `1.0`) — it scales the
 sway and twist size (the pincer still fully opens/closes on the beat):
 
 ```bash
-python dance.py --port COM4 --audio-source loopback --intensity 0.5
+python -m demos.dance --port COM4 --audio-source loopback --intensity 0.5
 ```
 
 ## Making the pincer actually close
@@ -108,7 +108,7 @@ calibrated `0` isn't necessarily its closed position — on some builds `0` is
 fully *open*, so the pincer never appears to close. Find your real values:
 
 ```bash
-python dance.py --port COM4 --read-gripper
+python -m demos.dance --port COM4 --read-gripper
 ```
 
 This frees just the gripper (the rest of the arm holds still) and prints its
@@ -117,7 +117,7 @@ note that one. Then save them once in **`.env`** (see below) so every run
 uses them — or pass them ad-hoc:
 
 ```bash
-python dance.py --port COM4 --audio-source loopback \
+python -m demos.dance --port COM4 --audio-source loopback \
     --gripper-closed -61.32 --gripper-open 61.2
 ```
 
@@ -125,7 +125,7 @@ python dance.py --port COM4 --audio-source loopback \
 
 ## Settings & `.env`
 
-Per-arm settings live in `config.py` and are read from a `.env` file (and/or
+Per-arm settings live in `brachiomimus/config.py` and are read from a `.env` file (and/or
 real environment variables), so you don't retype your calibration every run.
 The repo ships a `.env` with placeholder gripper values — edit it to match
 your arm:
@@ -145,8 +145,9 @@ are fine to commit; if you ever add secrets, put them in `.env.local`
 (gitignored).
 
 The remaining pose amounts (sway/twist degrees, ramp speeds) are constants
-near the top of `dance.py`, and the audio DSP lives in `analysis.py`; the
-`--monitor` and `--read-gripper` helpers live in `diagnostics.py`.
+near the top of `demos/dance.py`, and the audio DSP lives in
+`brachiomimus/analysis.py`; the `--monitor` and `--read-gripper` helpers live
+in `tools/diagnostics.py`.
 
 ## Windows notes
 
@@ -157,10 +158,11 @@ near the top of `dance.py`, and the audio DSP lives in `analysis.py`; the
   currently treats as the default output.
 - Same serial port notes as the rest of the docs apply — find your port with
   `[System.IO.Ports.SerialPort]::GetPortNames()` (see
-  [README.md](README.md#finding-your-serial-port)).
+  [README.md](../README.md#finding-your-serial-port)).
 
 ## Stopping
 
-Ctrl+C ramps the arm to a raised, tucked pose (the same one `wave.py` uses
-for `WAVE_READY_POSE`) before disabling torque and exiting — not the flat
+Ctrl+C ramps the arm to a raised, tucked pose (the shared `READY_POSE` from
+`brachiomimus/hardware.py`, the same one `demos/wave.py` uses) before disabling
+torque and exiting — not the flat
 rest pose, which would let it sag onto the table once torque cuts.

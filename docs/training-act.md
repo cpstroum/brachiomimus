@@ -1,6 +1,6 @@
 # Training a policy
 
-Train a policy on a dataset recorded in [TELEOPERATION.md](TELEOPERATION.md),
+Train a policy on a dataset recorded in [teleoperation.md](teleoperation.md),
 then run it on Brachiomimus.
 
 ## Train
