@@ -31,7 +31,7 @@ motors = {
 **Calibration** — pass calibration explicitly as a `dict[str, MotorCalibration]`
 loaded from the JSON file LeRobot saves at:
 ```
-~/.cache/huggingface/lerobot/calibration/robots/so101_follower/brachiomimus_follower.json
+~/.cache/huggingface/lerobot/calibration/robots/so_follower/brachiomimus_follower.json
 ```
 ```python
 import json
@@ -67,6 +67,43 @@ the low-saturation gripper and pale background out of the mask.
 **No force sensing.** Visual servoing has no grasp confirmation — the arm can't
 tell whether it actually closed on the object. Watch the lift; don't leave it
 running unattended.
+
+## Rung 1 — training ACT on HF Jobs
+
+Notes from actually training the block-movement policy on
+[`cpstroum/so101-brachiomimus-50ep`](https://huggingface.co/datasets/cpstroum/so101-brachiomimus-50ep)
+(50 episodes, "Pick up the yellow block and put it in the blue box").
+
+**5k steps is not enough.** The first run (`--steps=5000`) produced a policy that
+was "super jittery" and failed eval. Bumping to `--steps=30000` (6×) gave a
+usable one. Batch size stayed at 16 throughout.
+
+**Watch the wall clock, not just the step count.** A `t4-small` Job **timed out**
+before finishing 30k steps — loading the dataset and setting up the environment
+eats real minutes before training even starts. Fixes that worked: a bigger
+flavor (`a10g-small`) and a longer `--timeout` (6h), plus `--save_freq=5000` so a
+timeout still leaves recoverable checkpoints.
+
+**Always enable W&B.** `--wandb.enable=true --wandb.project=so101-brachiomimus` on
+every run — the loss curve is the only way to judge a slow cloud run without
+burning an eval, and comparing curves across runs is how the step-count decision
+got made.
+
+**Publish the policy or you can't eval it.** `--policy.push_to_hub=true` pushes
+the trained model to `--policy.repo_id` on the Hub; eval then pulls it with
+`--policy.path=<that repo id>`. The early runs that skipped this left the policy
+stuck in the Job.
+
+**Auth without keys in the command.** HF was already authenticated
+(`huggingface-cli login`), so no token appears in any command — HF Jobs pulls it
+from the `HF_TOKEN` secret. W&B needs its key passed as a Job secret
+(`--secrets WANDB_API_KEY`); keep it a *stored* secret, not an inline value, so
+it never reaches shell history or a commit.
+
+**Eval via record, not rollout.** Rollouts are captured with `lerobot-record
+--policy.path=...` into an `eval_*` dataset, optionally with the leader still
+attached for resets between episodes. Keep eval-dataset and policy versions in
+lockstep (`-v2` ↔ `-v2`).
 
 ## Repository structure
 

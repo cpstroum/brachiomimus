@@ -65,19 +65,23 @@ Feetech-based arms typically appear as `/dev/ttyACM0`. Run `dmesg | tail -20` if
 
 After running `lerobot-calibrate`, files are saved here:
 
-| Arm | Name | Path |
-|-----|------|------|
-| Follower | Brachiomimus | `~/.cache/huggingface/lerobot/calibration/robots/so101_follower/brachiomimus_follower.json` |
-| Leader | Brachius Rex | `~/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/brachius_rex.json` |
+| Arm | Name | Port | Calibration file |
+|-----|------|------|------------------|
+| Follower | Brachiomimus | `COM4` | `~/.cache/huggingface/lerobot/calibration/robots/so_follower/brachiomimus_follower.json` |
+| Leader | Brachius Rex | `COM7` | `~/.cache/huggingface/lerobot/calibration/teleoperators/so_leader/brachio_rex_leader.json` |
+
+(LeRobot writes under `so_follower` / `so_leader`, not `so101_*`. Ports are the
+Windows enumeration on this setup — `COM4` follower, `COM7` leader; on Linux
+they'd be `/dev/ttyACM*`.)
 
 Calibrate the follower:
 ```bash
-lerobot-calibrate --robot.type=so101_follower --robot.port=/dev/ttyACM0 --robot.id=brachiomimus_follower
+lerobot-calibrate --robot.type=so101_follower --robot.port=COM4 --robot.id=brachiomimus_follower
 ```
 
 Calibrate the leader:
 ```bash
-lerobot-calibrate --teleop.type=so101_leader --teleop.port=/dev/ttyACM1 --teleop.id=brachius_rex
+lerobot-calibrate --teleop.type=so101_leader --teleop.port=COM7 --teleop.id=brachio_rex_leader
 ```
 
 **Tip:** When calibrating, position the arm at the physical midpoint of every
