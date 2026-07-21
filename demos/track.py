@@ -13,9 +13,9 @@ face is in view, the arm eases back to a centered "watching" pose instead of
 snapping.
 
 Usage:
-    python track.py --port /dev/ttyACM0
-    python track.py --port COM4 --show          # debug window with face box
-    python track.py --dry-run --show             # no arm, just watch detection
+    python -m demos.track --port /dev/ttyACM0
+    python -m demos.track --port COM4 --show          # debug window with face box
+    python -m demos.track --dry-run --show             # no arm, just watch detection
 
 Requires opencv-python (`pip install opencv-python`), not otherwise a
 dependency of this repo.
@@ -26,12 +26,16 @@ import time
 
 import cv2
 
-from wave import CALIBRATION_PATH, MOTORS, WAVE_READY_POSE, load_calibration
 from lerobot.motors.feetech import FeetechMotorsBus
 
-# Centered version of wave.py's raised "ready" pose - arm up and alert,
-# facing forward, rather than angled out for a wave.
-TRACK_READY_POSE = {**WAVE_READY_POSE, "shoulder_pan": 0.0}
+from brachiomimus import config
+from brachiomimus.hardware import CALIBRATION_PATH, MOTORS, READY_POSE, load_calibration
+from brachiomimus.motion import clamp_step
+from brachiomimus.vision import face_detector, largest_face
+
+# Centered version of the raised "ready" pose - arm up and alert, facing
+# forward, rather than angled out for a wave.
+TRACK_READY_POSE = {**READY_POSE, "shoulder_pan": 0.0}
 
 PAN_JOINT = "shoulder_pan"
 TILT_JOINT = "wrist_flex"
@@ -44,25 +48,6 @@ GREET_PULSE_S = 0.4  # how long the gripper stays open on first sighting
 GREET_OPEN_DEG = 20.0
 
 
-def blend(a: dict, b: dict, t: float) -> dict:
-    return {k: a[k] + (b[k] - a[k]) * t for k in a}
-
-
-def clamp_step(current: dict, target: dict, max_step: float) -> dict:
-    out = {}
-    for k, v in target.items():
-        delta = max(-max_step, min(max_step, v - current[k]))
-        out[k] = current[k] + delta
-    return out
-
-
-def largest_face(gray, detector) -> tuple[int, int, int, int] | None:
-    faces = detector.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(60, 60))
-    if len(faces) == 0:
-        return None
-    return max(faces, key=lambda f: f[2] * f[3])
-
-
 def run(
     port: str,
     camera: int,
@@ -73,7 +58,7 @@ def run(
     invert_pan: bool,
     invert_tilt: bool,
 ) -> None:
-    detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    detector = face_detector()
     cap = cv2.VideoCapture(camera)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera {camera}")
@@ -156,8 +141,8 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Make Brachiomimus track faces with a webcam")
     parser.add_argument(
-        "--port", default="/dev/ttyUSB0",
-        help="Serial port the arm is connected to (default: /dev/ttyUSB0)"
+        "--port", default=config.PORT,
+        help=f"Serial port the arm is connected to (default: {config.PORT})"
     )
     parser.add_argument(
         "--camera", type=int, default=0,

@@ -16,7 +16,9 @@ Run via dance.py's --monitor / --read-gripper flags.
 import collections
 import time
 
-from analysis import (
+from lerobot.motors.feetech import FeetechMotorsBus
+
+from brachiomimus.analysis import (
     BLOCK_SIZE,
     SAMPLE_RATE,
     TICK_HZ,
@@ -24,9 +26,8 @@ from analysis import (
     bass_energy,
     estimate_bpm,
 )
-from audio_source import create_source
-from lerobot.motors.feetech import FeetechMotorsBus
-from wave import CALIBRATION_PATH, MOTORS, load_calibration
+from brachiomimus.audio import create_source
+from brachiomimus.hardware import CALIBRATION_PATH, MOTORS, load_calibration
 
 GRIPPER_JOINT = "gripper"
 

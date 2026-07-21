@@ -5,18 +5,51 @@ Experiments with a pair of SO-101 robotic arms using LeRobot:
 - **Brachius Rex** — the leader arm (teleoperator, human-driven)
 - **Brachiomimus** — the follower arm (does the actual work)
 
-This doc is the getting-started path: get the follower talking to your
-computer, calibrated, and moving on its own. Once that's working:
+## The spectrum of experiments
 
-- **[TELEOPERATION.md](TELEOPERATION.md)** — drive Brachiomimus with Brachius
-  Rex and record a demonstration dataset with a webcam
-- **[TRAINING.md](TRAINING.md)** — train a policy on that dataset and run it
-  on the robot
-- **[MUSIC.md](MUSIC.md)** — make Brachiomimus dance to music playing on your
-  computer
+This repo isn't one project — it's a ladder of approaches to making the arm
+act, each rung trading **hand-authoring** for **learned generalization**. The
+code and docs are organized around that ladder:
+
+| Rung | Approach | Perception | Control | Generalizes to | Where |
+|------|----------|------------|---------|----------------|-------|
+| **0 — open-loop scripted** | hand-authored motion, no feedback | none | you author every pose | nothing — it does exactly what you wrote | `demos/wave.py`, `demos/dance.py` + [music](docs/music.md) |
+| **0.5 — classical closed-loop** | perception in the loop, hand-authored control law | OpenCV (faces, color blobs) | visual servoing | new object *positions* in view | `demos/track.py`, `demos/reach.py` |
+| **1 — imitation (ACT)** | learn one task from your demos | learned | learned | new positions *within* the trained task | [teleoperation](docs/teleoperation.md) → [training](docs/training-act.md) |
+| **2 — VLA** *(next)* | language-conditioned, pretrained | learned + language | learned | new *instructions* and tasks | [roadmap](docs/vla.md) |
+
+The `wave` → `dance` → `track` → `reach` → ACT → VLA progression is the story:
+you start by scripting every move, then close a perception loop, then hand the
+whole sensorimotor mapping to a learned policy, then to one that understands
+language. See [docs/vla.md](docs/vla.md) for where the learned work is headed.
+
+## Repository layout
+
+```
+brachiomimus/     shared core (importable package)
+  hardware.py       motor defs, canonical poses, calibration loading
+  motion.py         pose interpolation / slew-limit helpers
+  vision.py         OpenCV perception (face + colored-blob detection)
+  audio.py          real-time audio sources for the music demo
+  analysis.py       audio DSP (loudness, beat detection, BPM)
+  config.py         env/.env-sourced user settings
+demos/            runnable behaviors — rungs 0 and 0.5
+  wave.py  dance.py  track.py  reach.py
+tools/            tuning / calibration helpers (not behaviors)
+  diagnostics.py  probe_color.py
+docs/             the how-to and the roadmap
+```
+
+Behaviors and tools import from the `brachiomimus` package and are launched as
+modules from the repo root, e.g. `python -m demos.wave`. (Running them lets
+Python find the package; `python demos/wave.py` would not.)
 
 Ports/IDs in the commands below are examples — substitute your own (`COM3`
 on Windows, `/dev/ttyACM0` on Linux, etc).
+
+**Settings & secrets:** copy `.env.example` to `.env` (gitignored) and fill in
+your arm's calibration; `.env` is also where the W&B key for cloud training
+lives. See [docs/training-act.md](docs/training-act.md#authentication-keys-live-in-env).
 
 ## Finding your serial port
 
@@ -36,41 +69,44 @@ Feetech-based arms typically appear as `/dev/ttyACM0`. Run `dmesg | tail -20` if
 
 After running `lerobot-calibrate`, files are saved here:
 
-| Arm | Name | Path |
-|-----|------|------|
-| Follower | Brachiomimus | `~/.cache/huggingface/lerobot/calibration/robots/so101_follower/brachiomimus_follower.json` |
-| Leader | Brachius Rex | `~/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/brachius_rex.json` |
+| Arm | Name | Port | Calibration file |
+|-----|------|------|------------------|
+| Follower | Brachiomimus | `COM4` | `~/.cache/huggingface/lerobot/calibration/robots/so_follower/brachiomimus_follower.json` |
+| Leader | Brachius Rex | `COM7` | `~/.cache/huggingface/lerobot/calibration/teleoperators/so_leader/brachio_rex_leader.json` |
+
+(LeRobot writes under `so_follower` / `so_leader`, not `so101_*`. Ports are the
+Windows enumeration on this setup — `COM4` follower, `COM7` leader; on Linux
+they'd be `/dev/ttyACM*`.)
 
 Calibrate the follower:
 ```bash
-lerobot-calibrate --robot.type=so101_follower --robot.port=/dev/ttyACM0 --robot.id=brachiomimus_follower
+lerobot-calibrate --robot.type=so101_follower --robot.port=COM4 --robot.id=brachiomimus_follower
 ```
 
 Calibrate the leader:
 ```bash
-lerobot-calibrate --teleop.type=so101_leader --teleop.port=/dev/ttyACM1 --teleop.id=brachius_rex
+lerobot-calibrate --teleop.type=so101_leader --teleop.port=COM7 --teleop.id=brachio_rex_leader
 ```
 
 **Tip:** When calibrating, position the arm at the physical midpoint of every
 joint *before* launching the script — not just when prompted. If a joint is
 too far off-center, LeRobot will crash with a `Magnitude exceeds 2047` error.
 
-## Wave demo — direct scripted control of Brachiomimus
+## Rung 0 — Wave: direct scripted control
 
-A standalone demo that drives Brachiomimus (the follower) straight through a
-hand-rolled `FeetechMotorsBus`, bypassing LeRobot's robot/teleoperator
-classes entirely. No leader arm or camera involved — just the follower doing
-a scripted wave. Good first check that calibration took and the arm responds.
+Drives Brachiomimus straight through a hand-rolled `FeetechMotorsBus`,
+bypassing LeRobot's robot/teleoperator classes entirely. No leader arm or
+camera — just the follower doing a scripted wave. Good first check that
+calibration took and the arm responds.
 
 ```bash
-# Linux
-python wave.py --port /dev/ttyACM0 --reps 3
-
-# Windows
-python wave.py --port COM4 --reps 3
+python -m demos.wave --port /dev/ttyACM0 --reps 3   # Linux
+python -m demos.wave --port COM4 --reps 3           # Windows
 ```
 
-## Face tracking demo — Brachiomimus watches the room
+Music-reactive dancing (also rung 0) lives in [docs/music.md](docs/music.md).
+
+## Rung 0.5 — Face tracking: Brachiomimus watches the room
 
 Points a plain webcam (not eye-in-hand — anywhere in the room works) at the
 space and turns the arm to face whoever it sees, using OpenCV's built-in
@@ -78,19 +114,19 @@ Haar cascade face detector. No ML training or camera calibration involved.
 
 > **OpenCV 5 caveat:** this uses the classic `cv2.CascadeClassifier` Haar
 > API, which OpenCV 5 removed (along with the bundled cascade files). Run
-> it on OpenCV **4.x** — `pip install "opencv-python>=4.8,<5"`. `reach.py`
+> it on OpenCV **4.x** — `pip install "opencv-python>=4.8,<5"`. `reach`
 > below has no such constraint.
 
 ```bash
-python track.py --port /dev/ttyACM0
-python track.py --port COM4 --show      # debug window with the face boxed
-python track.py --dry-run --show        # try it with no arm connected
+python -m demos.track --port /dev/ttyACM0
+python -m demos.track --port COM4 --show      # debug window with the face boxed
+python -m demos.track --dry-run --show        # try it with no arm connected
 ```
 
 If the arm pans or tilts the wrong way for your camera's orientation, add
 `--invert-pan` / `--invert-tilt`.
 
-## Reach demo — grasp a colored object with the wrist camera
+## Rung 0.5 — Reach: grasp a colored object with the wrist camera
 
 Uses a **wrist-mounted** camera (not the room-facing one from the tracking
 demo above) to visually servo onto a colored blob — defaults to a
@@ -104,12 +140,12 @@ Install the vision dependencies first (on top of your working LeRobot
 environment): `pip install -r requirements.txt`.
 
 ```bash
-python reach.py --port /dev/ttyACM0 --camera 1 --show
-python reach.py --dry-run --show      # tune detection with no arm connected
+python -m demos.reach --port /dev/ttyACM0 --camera 1 --show
+python -m demos.reach --dry-run --show      # tune detection with no arm connected
 ```
 
 **This needs on-arm tuning before it'll do anything useful** — see the
-docstring in `reach.py` for what to jog in by hand (the hover pose) and
+docstring in `demos/reach.py` for what to jog in by hand (the hover pose) and
 what to dial in with `--show` (the HSV color range, and
 `--invert-pan`/`--invert-tilt` if centering moves the wrong way). There's
 no force sensing, so it doesn't verify the grasp actually took — watch the
@@ -120,44 +156,23 @@ lift and judge for yourself, and don't leave it unattended.
 cast detect poorly. The reliable trick: tie a scrap of brightly colored
 yarn at the spot you want grabbed, in a hue that's absent from the rest of
 the scene, and detect that — high saturation also keeps the gripper and any
-pale background out of the mask. Use `probe_color.py` to read the marker's
-real HSV (click it in the feed), then set `--hue-min/--hue-max/--sat-min/
---val-min` to bracket it. For a thin marker, lower `--min-area` so the grasp
-still triggers. (There's also a `--white` mode for a white-string target,
-but it needs a dark backdrop and can latch onto a shiny gripper — a colored
-marker is safer.)
+pale background out of the mask. Use `python -m tools.probe_color` to read the
+marker's real HSV (click it in the feed), then set `--hue-min/--hue-max/
+--sat-min/--val-min` to bracket it. For a thin marker, lower `--min-area` so
+the grasp still triggers. (There's also a `--white` mode for a white-string
+target, but it needs a dark backdrop and can latch onto a shiny gripper — a
+colored marker is safer.)
 
-## Lessons learned: LeRobot compatibility notes (v0.4.x)
+## Rungs 1 & 2 — learned policies
 
-These broke silently when upgrading from older LeRobot versions — relevant
-if you're writing your own low-level scripts like `wave.py`:
+- **[docs/teleoperation.md](docs/teleoperation.md)** — drive Brachiomimus with
+  Brachius Rex and record a demonstration dataset with a webcam
+- **[docs/training-act.md](docs/training-act.md)** — train an ACT policy on that
+  dataset and run it on the robot (rung 1)
+- **[docs/vla.md](docs/vla.md)** — the roadmap toward language-conditioned,
+  generalizing policies (rung 2)
 
-**Import path** — `lerobot.common.robot_devices.motors.feetech` no longer exists. Use:
-```python
-from lerobot.motors.feetech import FeetechMotorsBus
-```
+## Lessons learned
 
-**Motor definitions** — motors are no longer plain `(id, model)` tuples. Use the `Motor` dataclass:
-```python
-from lerobot.motors import Motor, MotorNormMode
-from lerobot.motors.feetech import FeetechMotorsBus
-
-motors = {
-    "shoulder_pan": Motor(id=1, model="sts3215", norm_mode=MotorNormMode.DEGREES),
-    # ...
-}
-```
-
-**Calibration** — pass calibration explicitly as a `dict[str, MotorCalibration]` loaded from the JSON file LeRobot saves at:
-```
-~/.cache/huggingface/lerobot/calibration/robots/so101_follower/brachiomimus_follower.json
-```
-```python
-import json
-from lerobot.motors import MotorCalibration
-
-with open(calibration_path) as f:
-    data = json.load(f)
-calibration = {name: MotorCalibration(**fields) for name, fields in data.items()}
-bus = FeetechMotorsBus(port=port, motors=motors, calibration=calibration)
-```
+Hard-won, cross-cutting notes (LeRobot version gotchas, etc.) live in
+**[docs/learnings.md](docs/learnings.md)**, tagged by rung.

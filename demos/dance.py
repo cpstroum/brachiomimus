@@ -15,21 +15,23 @@ calibration, default port) come from config.py / a .env file. This module is
 the core dance loop.
 
 Usage:
-    python dance.py --port COM4 --audio-source loopback
-    python dance.py --port /dev/ttyUSB0 --audio-source mic
-    python dance.py --port COM4 --audio-source file --file song.wav
-    python dance.py --monitor --audio-source loopback   # tune, no arm
-    python dance.py --port COM4 --read-gripper           # find gripper angles
+    python -m demos.dance --port COM4 --audio-source loopback
+    python -m demos.dance --port /dev/ttyUSB0 --audio-source mic
+    python -m demos.dance --port COM4 --audio-source file --file song.wav
+    python -m demos.dance --monitor --audio-source loopback   # tune, no arm
+    python -m demos.dance --port COM4 --read-gripper           # find gripper angles
 
-See MUSIC.md for setup, source selection, and tuning notes.
+See docs/music.md for setup, source selection, and tuning notes.
 """
 
 import argparse
 import collections
 import time
 
-import config
-from analysis import (
+from lerobot.motors.feetech import FeetechMotorsBus
+
+from brachiomimus import config
+from brachiomimus.analysis import (
     BLOCK_SIZE,
     SAMPLE_RATE,
     TICK_HZ,
@@ -38,16 +40,16 @@ from analysis import (
     bass_energy,
     estimate_bpm,
 )
-from audio_source import create_source
-from diagnostics import monitor, read_gripper
-from lerobot.motors.feetech import FeetechMotorsBus
-from wave import CALIBRATION_PATH, MOTORS, REST_POSE, WAVE_READY_POSE, load_calibration
+from brachiomimus.audio import create_source
+from brachiomimus.hardware import CALIBRATION_PATH, MOTORS, READY_POSE, REST_POSE, load_calibration
+from brachiomimus.motion import blend, clamp_step
+from tools.diagnostics import monitor, read_gripper
 
 # On shutdown, ramp to this raised/curled pose instead of REST_POSE - REST_POSE
 # is flat (all zeros) and lets the arm sag/collapse onto the table once torque
-# is enabled again; WAVE_READY_POSE is the same tucked-up raised pose wave.py
+# is enabled again; READY_POSE is the same tucked-up raised pose wave.py
 # already uses and is known to be a safe, calibrated resting configuration.
-CURL_POSE = WAVE_READY_POSE
+CURL_POSE = READY_POSE
 
 MAX_STEP_DEG = 6.0  # per-tick slew limit keeps the big joints smooth/safe
 # The gripper is light and should snap open/closed so the pincer reads as a
@@ -55,7 +57,7 @@ MAX_STEP_DEG = 6.0  # per-tick slew limit keeps the big joints smooth/safe
 # traverse the full range before the next beat flips it.
 GRIPPER_MAX_STEP_DEG = 20.0
 
-# Arm raised, similar in spirit to wave.py's WAVE_READY_POSE
+# Arm raised, similar in spirit to hardware.READY_POSE
 DANCE_POSE = {
     "shoulder_pan": 0.0,
     "shoulder_lift": -60.0,
@@ -85,20 +87,6 @@ GRIPPER_OPEN_DEG = config.GRIPPER_OPEN_DEG
 
 # Per-joint overrides to the default MAX_STEP_DEG slew limit.
 JOINT_MAX_STEP = {GRIPPER_JOINT: GRIPPER_MAX_STEP_DEG}
-
-
-def blend(a: dict, b: dict, t: float) -> dict:
-    return {k: a[k] + (b[k] - a[k]) * t for k in a}
-
-
-def clamp_step(current: dict, target: dict, max_step: float, overrides: dict | None = None) -> dict:
-    overrides = overrides or {}
-    out = {}
-    for k, v in target.items():
-        limit = overrides.get(k, max_step)
-        delta = max(-limit, min(limit, v - current[k]))
-        out[k] = current[k] + delta
-    return out
 
 
 def run(
