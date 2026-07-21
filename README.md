@@ -70,6 +70,63 @@ python wave.py --port /dev/ttyACM0 --reps 3
 python wave.py --port COM4 --reps 3
 ```
 
+## Face tracking demo — Brachiomimus watches the room
+
+Points a plain webcam (not eye-in-hand — anywhere in the room works) at the
+space and turns the arm to face whoever it sees, using OpenCV's built-in
+Haar cascade face detector. No ML training or camera calibration involved.
+
+> **OpenCV 5 caveat:** this uses the classic `cv2.CascadeClassifier` Haar
+> API, which OpenCV 5 removed (along with the bundled cascade files). Run
+> it on OpenCV **4.x** — `pip install "opencv-python>=4.8,<5"`. `reach.py`
+> below has no such constraint.
+
+```bash
+python track.py --port /dev/ttyACM0
+python track.py --port COM4 --show      # debug window with the face boxed
+python track.py --dry-run --show        # try it with no arm connected
+```
+
+If the arm pans or tilts the wrong way for your camera's orientation, add
+`--invert-pan` / `--invert-tilt`.
+
+## Reach demo — grasp a colored object with the wrist camera
+
+Uses a **wrist-mounted** camera (not the room-facing one from the tracking
+demo above) to visually servo onto a colored blob — defaults to a
+lavender-ish purple — and grasp it. No inverse kinematics or depth
+estimation: it centers the blob with `shoulder_pan`/`wrist_flex` and
+extends `elbow_flex` a bit each tick, using the blob getting bigger as the
+"getting closer" signal, then closes the gripper once it fills enough of
+the frame.
+
+Install the vision dependencies first (on top of your working LeRobot
+environment): `pip install -r requirements.txt`.
+
+```bash
+python reach.py --port /dev/ttyACM0 --camera 1 --show
+python reach.py --dry-run --show      # tune detection with no arm connected
+```
+
+**This needs on-arm tuning before it'll do anything useful** — see the
+docstring in `reach.py` for what to jog in by hand (the hover pose) and
+what to dial in with `--show` (the HSV color range, and
+`--invert-pan`/`--invert-tilt` if centering moves the wrong way). There's
+no force sensing, so it doesn't verify the grasp actually took — watch the
+lift and judge for yourself, and don't leave it unattended.
+
+**Pick a good target.** Detection is color-based, so it wants a distinct,
+*saturated* color. Muted natural objects (dried lavender) under a color
+cast detect poorly. The reliable trick: tie a scrap of brightly colored
+yarn at the spot you want grabbed, in a hue that's absent from the rest of
+the scene, and detect that — high saturation also keeps the gripper and any
+pale background out of the mask. Use `probe_color.py` to read the marker's
+real HSV (click it in the feed), then set `--hue-min/--hue-max/--sat-min/
+--val-min` to bracket it. For a thin marker, lower `--min-area` so the grasp
+still triggers. (There's also a `--white` mode for a white-string target,
+but it needs a dark backdrop and can latch onto a shiny gripper — a colored
+marker is safer.)
+
 ## Lessons learned: LeRobot compatibility notes (v0.4.x)
 
 These broke silently when upgrading from older LeRobot versions — relevant

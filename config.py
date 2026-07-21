@@ -1,5 +1,5 @@
 """
-config.py — user-tunable settings for dance.py, sourced from the environment.
+config.py — user-tunable settings for dance.py and reach.py, sourced from the environment.
 
 Values come from (highest priority first):
   1. a real environment variable (e.g. `BRACHIOMIMUS_PORT=COM4 python dance.py`)
