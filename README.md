@@ -47,6 +47,10 @@ Python find the package; `python demos/wave.py` would not.)
 Ports/IDs in the commands below are examples — substitute your own (`COM3`
 on Windows, `/dev/ttyACM0` on Linux, etc).
 
+**Settings & secrets:** copy `.env.example` to `.env` (gitignored) and fill in
+your arm's calibration; `.env` is also where the W&B key for cloud training
+lives. See [docs/training-act.md](docs/training-act.md#authentication-keys-live-in-env).
+
 ## Finding your serial port
 
 **Windows (PowerShell):**

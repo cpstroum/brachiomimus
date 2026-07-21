@@ -96,9 +96,11 @@ stuck in the Job.
 
 **Auth without keys in the command.** HF was already authenticated
 (`huggingface-cli login`), so no token appears in any command — HF Jobs pulls it
-from the `HF_TOKEN` secret. W&B needs its key passed as a Job secret
-(`--secrets WANDB_API_KEY`); keep it a *stored* secret, not an inline value, so
-it never reaches shell history or a commit.
+from the `HF_TOKEN` secret. The W&B key lives in the gitignored `.env` and is
+passed with `--secrets-file .env` (encrypted server-side), so it never reaches
+shell history, notes, or a commit. Early runs pasted the key inline
+(`--secrets WANDB_API_KEY=wandb_...`) — the `.env` + `--secrets-file` approach
+replaced that.
 
 **Eval via record, not rollout.** Rollouts are captured with `lerobot-record
 --policy.path=...` into an `eval_*` dataset, optionally with the leader still

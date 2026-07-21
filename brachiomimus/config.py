@@ -9,8 +9,10 @@ Values come from (highest priority first):
 CLI flags on the demos still win over all of these — the env/.env layer just
 sets the defaults so you don't have to retype your arm's calibration every run.
 
-These are hardware-specific but NOT secrets. If you ever add real secrets
-(API tokens etc.), put them in `.env.local`, which is gitignored.
+The committed template is `.env.example`; copy it to `.env` (which is
+gitignored) and fill in your values. Because `.env` is never committed, it may
+also hold real secrets — e.g. `WANDB_API_KEY`, which cloud training reads via
+`hf jobs run --secrets-file .env`.
 """
 
 import os

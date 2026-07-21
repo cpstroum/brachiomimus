@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 
-# Local secrets/overrides (the committed .env holds only non-secret calibration)
+# Your real .env holds per-arm calibration AND secrets (e.g. the W&B key), so
+# it must never be committed. Copy .env.example -> .env to get started.
+.env
 .env.local

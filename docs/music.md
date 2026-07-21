@@ -127,22 +127,23 @@ python -m demos.dance --port COM4 --audio-source loopback \
 
 Per-arm settings live in `brachiomimus/config.py` and are read from a `.env` file (and/or
 real environment variables), so you don't retype your calibration every run.
-The repo ships a `.env` with placeholder gripper values — edit it to match
-your arm:
+The repo ships a committed template, `.env.example`; copy it to `.env` (which is
+gitignored) and edit it to match your arm:
 
 ```ini
-# .env
+# .env  (copied from .env.example)
 BRACHIOMIMUS_GRIPPER_CLOSED_DEG=-61.32
 BRACHIOMIMUS_GRIPPER_OPEN_DEG=61.2
-# BRACHIOMIMUS_PORT=COM4
+BRACHIOMIMUS_PORT=COM4
 # BRACHIOMIMUS_SENSITIVITY=1.8
 # BRACHIOMIMUS_INTENSITY=1.0
 ```
 
 Precedence: a CLI flag beats a real environment variable, which beats `.env`,
-which beats the built-in default. These are non-secret hardware settings and
-are fine to commit; if you ever add secrets, put them in `.env.local`
-(gitignored).
+which beats the built-in default. Because `.env` is gitignored, it's also where
+your training secret (`WANDB_API_KEY`) lives — see
+[training-act.md](training-act.md#authentication-keys-live-in-env). The
+committed `.env.example` stays secret-free.
 
 The remaining pose amounts (sway/twist degrees, ramp speeds) are constants
 near the top of `demos/dance.py`, and the audio DSP lives in

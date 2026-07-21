@@ -9,16 +9,24 @@ the SO-101 dataset trains faster on a rented A10G than on the local machine, and
 the trained policy lands straight on the Hub. A local fallback is noted at the
 end.
 
-## Authentication (no keys in the command)
+## Authentication (keys live in `.env`)
 
-- **Hugging Face** — be logged in once with `huggingface-cli login`. In the Job,
-  the token is pulled from your stored `HF_TOKEN` secret via `--secrets HF_TOKEN`;
-  it never appears in the command itself.
-- **Weights & Biases** — pass `WANDB_API_KEY` as a Job secret. Prefer a *stored*
-  secret (`--secrets WANDB_API_KEY`) over inlining the value, so the key never
-  lands in shell history or a committed doc. **Always enable W&B** — the loss
-  curve is how you tell a good run from a bad one, and these runs are too slow to
-  judge blind.
+No API keys go in the command — they're read from your gitignored `.env`
+(copied from [`.env.example`](../.env.example)), so nothing sensitive lands in
+your notes or shell history:
+
+- **Weights & Biases** — put your key in `.env` as `WANDB_API_KEY=...` (get it
+  from <https://wandb.ai/authorize>). The Job reads it via `--secrets-file .env`,
+  which encrypts the values server-side. **Always enable W&B** — the loss curve
+  is how you tell a good run from a bad one, and these runs are too slow to judge
+  blind.
+- **Hugging Face** — be logged in once with `huggingface-cli login`; the Job
+  pulls your token via `--secrets HF_TOKEN` without it ever appearing in the
+  command. (Only add `HF_TOKEN=...` to `.env` if you need to pass one explicitly.)
+
+`--secrets-file .env` sends every key in the file to the Job as an encrypted
+secret; the non-secret `BRACHIOMIMUS_*` lines are simply unused there. Run the
+command from the repo root so `.env` is found.
 
 ## Train on HF Jobs
 
@@ -27,7 +35,7 @@ hf jobs run `
   --flavor a10g-small `
   --timeout 6h `
   --secrets HF_TOKEN `
-  --secrets WANDB_API_KEY `
+  --secrets-file .env `
   huggingface/lerobot-gpu:latest `
   -- `
   python -m lerobot.scripts.lerobot_train `
