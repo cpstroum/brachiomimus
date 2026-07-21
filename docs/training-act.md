@@ -20,7 +20,7 @@ your notes or shell history:
   which encrypts the values server-side. **Always enable W&B** — the loss curve
   is how you tell a good run from a bad one, and these runs are too slow to judge
   blind.
-- **Hugging Face** — be logged in once with `huggingface-cli login`; the Job
+- **Hugging Face** — be logged in once with `hf auth login`; the Job
   pulls your token via `--secrets HF_TOKEN` without it ever appearing in the
   command. (Only add `HF_TOKEN=...` to `.env` if you need to pass one explicitly.)
 

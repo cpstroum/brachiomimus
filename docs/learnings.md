@@ -68,6 +68,18 @@ the low-saturation gripper and pale background out of the mask.
 tell whether it actually closed on the object. Watch the lift; don't leave it
 running unattended.
 
+## Rung 1 — recording datasets
+
+**`--dataset.video_encoding_batch_size` > 1 crashes on lerobot 0.4.4.** With the
+batched (non-streaming) encoder, any value above 1 dies at the batch boundary
+with `TypeError: 'NoneType' object is not subscriptable`. Confirmed firsthand —
+keep it at `1`, or record with streaming encoding
+(`--dataset.streaming_encoding=true`), which is the path this project uses anyway
+and sidesteps the batched encoder entirely.
+
+**`hf auth login` replaces `huggingface-cli login`.** The old command is
+deprecated; use `hf auth login` (write-scoped token) before any Hub push.
+
 ## Rung 1 — training ACT on HF Jobs
 
 Notes from actually training the block-movement policy on
@@ -95,7 +107,7 @@ the trained model to `--policy.repo_id` on the Hub; eval then pulls it with
 stuck in the Job.
 
 **Auth without keys in the command.** HF was already authenticated
-(`huggingface-cli login`), so no token appears in any command — HF Jobs pulls it
+(`hf auth login`), so no token appears in any command — HF Jobs pulls it
 from the `HF_TOKEN` secret. The W&B key lives in the gitignored `.env` and is
 passed with `--secrets-file .env` (encrypted server-side), so it never reaches
 shell history, notes, or a commit. Early runs pasted the key inline
