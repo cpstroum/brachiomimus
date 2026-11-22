@@ -4,29 +4,28 @@ Train an [ACT](../README.md#the-spectrum-of-experiments) policy (rung 1) on a
 dataset recorded in [teleoperation.md](teleoperation.md), then run it on
 Brachiomimus.
 
-Training here runs on **Hugging Face Jobs** (a cloud GPU) rather than locally —
-the SO-101 dataset trains faster on a rented A10G than on the local machine, and
-the trained policy lands straight on the Hub. A local fallback is noted at the
-end.
+I train on **Hugging Face Jobs** (a cloud GPU) instead of locally. The SO-101
+dataset trains faster on a rented A10G than on my laptop, and the trained policy
+lands straight on the Hub. There's a local option at the end.
 
 ## Authentication (keys live in `.env`)
 
-No API keys go in the command — they're read from your gitignored `.env`
-(copied from [`.env.example`](../.env.example)), so nothing sensitive lands in
+No API keys go in the command. They're read from your gitignored `.env`
+(copied from [`.env.example`](../.env.example)), so nothing sensitive ends up in
 your notes or shell history:
 
-- **Weights & Biases** — put your key in `.env` as `WANDB_API_KEY=...` (get it
+- **Weights & Biases:** put your key in `.env` as `WANDB_API_KEY=...` (get it
   from <https://wandb.ai/authorize>). The Job reads it via `--secrets-file .env`,
-  which encrypts the values server-side. **Always enable W&B** — the loss curve
-  is how you tell a good run from a bad one, and these runs are too slow to judge
-  blind.
-- **Hugging Face** — be logged in once with `huggingface-cli login`; the Job
-  pulls your token via `--secrets HF_TOKEN` without it ever appearing in the
-  command. (Only add `HF_TOKEN=...` to `.env` if you need to pass one explicitly.)
+  which encrypts the values server-side. **Always enable W&B.** The loss curve
+  is how you tell a good run from a bad one, and these runs are too slow to
+  judge blind.
+- **Hugging Face:** log in once with `huggingface-cli login`. The Job pulls your
+  token via `--secrets HF_TOKEN` without it appearing in the command. (Only add
+  `HF_TOKEN=...` to `.env` if you need to pass one explicitly.)
 
 `--secrets-file .env` sends every key in the file to the Job as an encrypted
-secret; the non-secret `BRACHIOMIMUS_*` lines are simply unused there. Run the
-command from the repo root so `.env` is found.
+secret; the non-secret `BRACHIOMIMUS_*` lines just go unused there. Run the
+command from the repo root so it finds `.env`.
 
 ## Train on HF Jobs
 
@@ -53,21 +52,21 @@ hf jobs run `
     --log_freq=100
 ```
 
-Flag notes (the values that were actually tuned across runs — see
-[learnings](learnings.md#rung-1--training-act-on-hf-jobs)):
+The flags I changed between runs (more in
+[learnings](learnings.md#rung-1-training-act-on-hf-jobs)):
 
-- `--flavor a10g-small` — the GPU. A `t4-small` **timed out** on 30k steps once
-  data-load and environment setup ate into the wall clock; `a10g-small` with a
-  `6h` timeout finishes comfortably.
-- `--steps=30000` — 5k steps produced a jittery policy that failed eval; ~30k
-  (6×) gave a usable one.
-- `--wandb.enable=true --wandb.project=so101-brachiomimus` — always on.
-- `--policy.push_to_hub=true` — publishes the trained policy to
+- `--flavor a10g-small`: the GPU. A `t4-small` **timed out** on 30k steps once
+  data loading and environment setup used up part of the clock. `a10g-small`
+  with a `6h` timeout finishes with room to spare.
+- `--steps=30000`: at 5k steps the policy twitched in place and failed eval.
+  About 30k (6×) worked.
+- `--wandb.enable=true --wandb.project=so101-brachiomimus`: always on.
+- `--policy.push_to_hub=true`: publishes the trained policy to
   `--policy.repo_id` on the Hub, so eval can pull it by name (below).
-- `--save_freq=5000` — checkpoint every 5k steps so a timeout doesn't lose
-  everything.
+- `--save_freq=5000`: saves a checkpoint every 5k steps so a timeout doesn't
+  lose everything.
 
-**Local alternative** (single GPU, slower):
+**Local option** (single GPU, slower):
 ```bash
 lerobot-train \
     --dataset.repo_id=cpstroum/so101-brachiomimus-50ep \
@@ -79,12 +78,12 @@ lerobot-train \
     --wandb.project=so101-brachiomimus \
     --output_dir=outputs/train/act_brachiomimus
 ```
-`--policy.device=mps` on Apple Silicon, `cpu` if you have no GPU (much slower).
-Checkpoints land under `outputs/train/act_brachiomimus/checkpoints/`.
+Use `--policy.device=mps` on Apple Silicon, or `cpu` if you have no GPU (much
+slower). Checkpoints land under `outputs/train/act_brachiomimus/checkpoints/`.
 
 ## Evaluate
 
-Eval is done by **recording rollouts with the policy driving** — `lerobot-record`
+I evaluate by **recording rollouts with the policy driving**: `lerobot-record`
 with `--policy.path` pointing at the trained policy on the Hub (not
 `lerobot-rollout`):
 
@@ -105,14 +104,13 @@ lerobot-record `
 ```
 
 - `--policy.path` pulls the trained policy from the Hub by repo id and lets it
-  drive the arm from camera + joint observations.
-- Keeping the leader connected (`--teleop.*`) lets you take over / reset between
-  the 10 eval episodes; drop those lines for hands-off eval.
+  drive the arm from the camera and joint observations.
+- Keeping the leader connected (`--teleop.*`) lets you take over or reset
+  between the 10 eval episodes. Drop those lines for hands-off eval.
 - Use the **same** `--dataset.single_task` string the policy was trained on.
-- Keep eval-dataset and policy versions in lockstep (`...-v2` eval for the `-v2`
-  policy) so you can tell which checkpoint each recording judged.
+- Keep eval-dataset and policy versions matched (`...-v2` eval for the `-v2`
+  policy) so you can tell which checkpoint each recording tested.
 
-Not happy with the result? Record more/cleaner demonstrations
-([teleoperation.md](teleoperation.md)), bump steps, and retrain — that's the
-loop. For where this goes *beyond* ACT (language-conditioned, multi-task), see
-[vla.md](vla.md).
+If the result isn't good, record more or cleaner demonstrations
+([teleoperation.md](teleoperation.md)), raise the step count, and retrain. For
+what comes after ACT (language-conditioned, multi-task), see [vla.md](vla.md).
