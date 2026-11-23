@@ -1,27 +1,27 @@
 # Dancing to music
 
-Make Brachiomimus move along with whatever's playing on your computer, via
-`demos/dance.py`. Two things drive the motion, computed live from the audio:
+`demos/dance.py` makes Brachiomimus move to whatever's playing on your
+computer. Two things drive the motion, computed live from the audio:
 
-- **Loudness** — a smoothed volume envelope sets how big all the motion is
-  right now (quiet → gentle, loud → big raises, wide swings, full pincer).
-- **Beat** — an onset detector watches just the bass band (~20-150Hz, kick
-  drum/bassline territory). On each beat the arm flips to new held targets
-  and then ramps smoothly toward them until the next beat:
+- **Loudness:** a smoothed volume envelope sets how big the motion is right
+  now (quiet → gentle, loud → big raises, wide swings, full pincer).
+- **Beat:** an onset detector watches only the bass band (~20-150Hz, the kick
+  drum and bassline). On each beat the arm picks new targets and ramps smoothly
+  toward them until the next beat:
   - the **gripper opens and closes** in time with the music (a pincer clench
     on every beat)
   - the **wrist twists** and the **shoulder sways** side to side at half-time
-    (every other beat, in opposition), so the arm grooves rather than
-    lurching on every beat — the pincer carries the beat, the body keeps time
+    (every other beat, in opposite directions), so the whole arm doesn't lurch
+    on every beat
 
   It only watches the bass band because hi-hats, cymbals, and vocals spike
-  far more often than the real tempo — that was what made earlier versions
-  feel chaotic/too-fast, especially on slower songs. A peak-relative
+  far more often than the real tempo. That's what made my earlier versions
+  feel chaotic and too fast, especially on slower songs. A peak-relative
   threshold further favors the strongest low-end hits (kicks/downbeats) over
   weaker off-beat bass notes.
 
-Assumes the follower is already calibrated — see the
-[Calibration](../README.md#calibration) section in the getting-started doc.
+This assumes the follower is already calibrated. See the
+[Calibration](../README.md#calibration) section of the README.
 
 ## Setup
 
@@ -29,20 +29,20 @@ Assumes the follower is already calibrated — see the
 pip install sounddevice numpy soundfile soundcard
 ```
 
-(`lerobot` should already be installed from the getting-started steps.)
-`soundcard` is only needed for `--audio-source loopback` — plain
-`sounddevice`/PortAudio has no WASAPI loopback support, so loopback capture
-goes through `soundcard` instead, which talks to WASAPI directly.
+(`lerobot` should already be installed.) You only need `soundcard` for
+`--audio-source loopback`. Plain `sounddevice`/PortAudio has no WASAPI loopback
+support, so loopback capture goes through `soundcard`, which talks to WASAPI
+directly.
 
 ## Audio source
 
-`--audio-source` picks where the audio comes from — pick whichever gives the
+`--audio-source` sets where the audio comes from. Use whichever gives the
 cleanest signal for your setup:
 
 | Source | What it does | When to use it |
 |---|---|---|
-| `mic` (default) | Records ambient sound through the microphone | Simplest — works with anything audible, including a phone or another speaker |
-| `loopback` | Captures the computer's own audio output digitally (WASAPI), no mic involved | Cleanest signal — use this if `mic` picks up USB/electrical noise from the arm sharing the same machine, or room noise |
+| `mic` (default) | Records ambient sound through the microphone | Simplest. Works with anything audible, including a phone or another speaker |
+| `loopback` | Captures the computer's own audio output digitally (WASAPI), no mic involved | Cleanest signal. Use this if `mic` picks up USB or electrical noise from the arm on the same machine, or room noise |
 | `file` | Plays a WAV file through the speakers while analyzing the exact same samples | For testing with a known track, or if you'd rather not deal with live capture at all |
 
 ```bash
@@ -58,25 +58,23 @@ python -m demos.dance --port COM4 --audio-source file --file song.wav
 ```
 
 If you're running everything from the same laptop that powers Brachiomimus
-and the mic picks up buzz/whine from the USB connection, switch to
-`loopback` (no mic needed) or `file` (fully offline signal) — that's exactly
-the tradeoff these three modes exist for.
+and the mic picks up buzz or whine from the USB connection, switch to
+`loopback` (no mic) or `file` (fully offline).
 
 ## Tuning the beat (no arm needed)
 
-If the arm reacts to more than the actual beat (twitchy, too fast), tune the
-detector with **monitor mode** — it listens and prints each detected beat
-with a live BPM estimate, but doesn't touch the arm. It works with any
-source, so you can tune against **whatever you're actually playing**,
-including YouTube in a browser:
+If the arm reacts to more than the beat (twitchy, too fast), tune the
+detector with **monitor mode**. It listens and prints each beat it detects with
+a live BPM estimate, but doesn't move the arm. It works with any source, so you
+can tune against **whatever you're playing**, including YouTube in a browser:
 
 ```bash
 # play your song (YouTube, Spotify, anything), then in another window:
 python -m demos.dance --monitor --audio-source loopback
 ```
 
-Watch the printed BPM. If it reads roughly the song's real tempo and holds
-steady, you're good. If it's too high / jumpy, raise the threshold until it
+Watch the printed BPM. If it's close to the song's real tempo and holds
+steady, you're good. If it's too high or jumpy, raise the threshold until it
 settles:
 
 ```bash
@@ -89,39 +87,39 @@ more noise). Once the BPM looks right in monitor mode, run for real with the
 same `--sensitivity` value plus your `--port`.
 
 There's also `--dry-run`, which prints the full computed pose every tick
-(not just beats) without moving the arm — more detail than you usually need,
-but handy if you want to see the exact joint targets.
+(not just on beats) without moving the arm. It's more detail than you usually
+need, but handy for seeing the exact joint targets.
 
 ## Calmer motion
 
-If it feels too wild, turn down `--intensity` (default `1.0`) — it scales the
-sway and twist size (the pincer still fully opens/closes on the beat):
+If it's too wild, turn down `--intensity` (default `1.0`). It scales the
+sway and twist (the pincer still fully opens and closes on the beat):
 
 ```bash
 python -m demos.dance --port COM4 --audio-source loopback --intensity 0.5
 ```
 
-## Making the pincer actually close
+## Making the pincer close
 
-The gripper opens/closes between two angles **in degrees**. Your arm's
-calibrated `0` isn't necessarily its closed position — on some builds `0` is
-fully *open*, so the pincer never appears to close. Find your real values:
+The gripper opens and closes between two angles **in degrees**. Your arm's
+calibrated `0` isn't necessarily closed. On some builds `0` is fully *open*, so
+the pincer never seems to close. Find your real values:
 
 ```bash
 python -m demos.dance --port COM4 --read-gripper
 ```
 
 This frees just the gripper (the rest of the arm holds still) and prints its
-live angle. Squeeze it fully closed and note the number, open it fully and
-note that one. Then save them once in **`.env`** (see below) so every run
-uses them — or pass them ad-hoc:
+live angle. Squeeze it fully closed and note the number, then open it fully and
+note that one. Save them once in **`.env`** (see below) so every run uses them,
+or pass them on the command line:
 
 ```bash
 python -m demos.dance --port COM4 --audio-source loopback \
     --gripper-closed -61.32 --gripper-open 61.2
 ```
 
-(The two can be in either order / either sign — whatever your arm reads.)
+(They can be in either order and either sign; use whatever your arm reads.)
 
 ## Settings & `.env`
 
@@ -141,7 +139,7 @@ BRACHIOMIMUS_PORT=COM4
 
 Precedence: a CLI flag beats a real environment variable, which beats `.env`,
 which beats the built-in default. Because `.env` is gitignored, it's also where
-your training secret (`WANDB_API_KEY`) lives — see
+your training secret (`WANDB_API_KEY`) lives. See
 [training-act.md](training-act.md#authentication-keys-live-in-env). The
 committed `.env.example` stays secret-free.
 
@@ -153,17 +151,16 @@ in `tools/diagnostics.py`.
 ## Windows notes
 
 - `--audio-source loopback` uses `soundcard` to capture the *default* Windows
-  playback device via WASAPI. If nothing seems to register, check that your
-  music player is actually outputting to that device (Windows Sound
-  settings) — it isn't tied to any particular player, just whatever Windows
-  currently treats as the default output.
-- Same serial port notes as the rest of the docs apply — find your port with
+  playback device via WASAPI. If nothing registers, check that your music
+  player is playing to that device (Windows Sound settings). It isn't tied to
+  any particular player; it uses whatever Windows treats as the default output.
+- The serial port notes from the rest of the docs apply here too. Find your port with
   `[System.IO.Ports.SerialPort]::GetPortNames()` (see
   [README.md](../README.md#finding-your-serial-port)).
 
 ## Stopping
 
-Ctrl+C ramps the arm to a raised, tucked pose (the shared `READY_POSE` from
-`brachiomimus/hardware.py`, the same one `demos/wave.py` uses) before disabling
-torque and exiting — not the flat
-rest pose, which would let it sag onto the table once torque cuts.
+Ctrl+C moves the arm to a raised, tucked pose (the shared `READY_POSE` from
+`brachiomimus/hardware.py`, the same one `demos/wave.py` uses) before turning
+off torque and exiting. It doesn't use the flat rest pose, because the arm
+would sag onto the table once torque cuts.
